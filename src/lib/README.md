@@ -1,0 +1,1 @@
+# src/lib\nCore learning engine code will live here in Phase 2+.\n
