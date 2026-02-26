@@ -96,10 +96,13 @@ export default function DomainPage({ params }: { params: Params }) {
 
   // “Mission” state
   const [missionOpen, setMissionOpen] = useState(false);
+  const [missionLen, setMissionLen] = useState<1 | 3>(3); // ✅ NEW: 1-question or 3-question mission
   const [questionIdx, setQuestionIdx] = useState(0);
   const [lastMistakes, setLastMistakes] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [answeredCorrectly, setAnsweredCorrectly] = useState<boolean | null>(null);
+  const [answeredCorrectly, setAnsweredCorrectly] = useState<boolean | null>(
+    null
+  );
 
   // Feedback inputs
   const [feedbackText, setFeedbackText] = useState("");
@@ -107,7 +110,6 @@ export default function DomainPage({ params }: { params: Params }) {
   const [wish, setWish] = useState<string | null>(null);
 
   const isMath = domainId === "math";
-
   const DOMAINS = ["math", "reading", "writing", "architecture", "spanish"];
 
   // Load + daily streak/challenge rules
@@ -116,7 +118,10 @@ export default function DomainPage({ params }: { params: Params }) {
 
     // If committed, enforce “missed day” logic (strict resets; gentle doesn’t hard reset)
     if (loaded.committed && loaded.lastCompletedDate) {
-      if (!isToday(loaded.lastCompletedDate) && !isYesterday(loaded.lastCompletedDate)) {
+      if (
+        !isToday(loaded.lastCompletedDate) &&
+        !isYesterday(loaded.lastCompletedDate)
+      ) {
         if (learner.challengeStyle === "strict") {
           loaded.challengeDay = 0;
           loaded.streak = 0;
@@ -138,18 +143,22 @@ export default function DomainPage({ params }: { params: Params }) {
 
   // Quest path nodes (Duolingo-style)
   const questNodes: QuestNode[] = useMemo(() => {
-    // simple logic: unlock nodes as you progress in-session (placeholder)
     const base: QuestNode[] = [
       { id: "warmup", title: "Warm-up", subtitle: "Easy start", status: "ready" },
       { id: "skill", title: "Skill", subtitle: "Today’s focus", status: "locked" },
-      { id: "practice", title: "Practice", subtitle: "A few tries", status: "locked", predictedStruggle: true },
+      {
+        id: "practice",
+        title: "Practice",
+        subtitle: "A few tries",
+        status: "locked",
+        predictedStruggle: true,
+      },
       { id: "miniBoss", title: "Mini Boss", subtitle: "Show what you know", status: "locked" },
       { id: "celebrate", title: "Celebrate", subtitle: "Victory!", status: "locked" },
     ];
 
     if (!missionOpen) return base;
 
-    // Unlock based on questionIdx just for now
     const unlockCount = clamp(1 + Math.floor(questionIdx / 1), 1, base.length);
     return base.map((n, i) => {
       if (i < unlockCount - 1) return { ...n, status: "done" };
@@ -167,7 +176,6 @@ export default function DomainPage({ params }: { params: Params }) {
 
   // A tiny “question bank” placeholder (we’ll replace with generated content later)
   const questions = useMemo(() => {
-    // For Elle (grade 1): smaller numbers; for Liv (grade 2): slightly bigger
     const easy = [
       { q: "2 + 1 = ?", a: ["2", "3", "4"], correct: 1, skill: "Adding small numbers" },
       { q: "5 − 2 = ?", a: ["3", "2", "4"], correct: 0, skill: "Subtracting small numbers" },
@@ -183,6 +191,9 @@ export default function DomainPage({ params }: { params: Params }) {
 
   const current = questions[questionIdx % questions.length];
 
+  const missionLastIndex = missionLen - 1;
+  const isLastQuestion = questionIdx >= missionLastIndex;
+
   function openAce(payload: NonNullable<typeof aceMode>) {
     setAceMode(payload);
     setShowAce(true);
@@ -194,6 +205,7 @@ export default function DomainPage({ params }: { params: Params }) {
   }
 
   function startMission() {
+    setMissionLen(3); // ✅ Reset to normal mission when starting fresh
     setMissionOpen(true);
     setQuestionIdx(0);
     setSelectedAnswer(null);
@@ -212,7 +224,9 @@ export default function DomainPage({ params }: { params: Params }) {
       // If already completed today, don’t double count
       if (s.lastCompletedDate && isToday(s.lastCompletedDate)) return s;
 
-      const nextStreak = s.lastCompletedDate && isYesterday(s.lastCompletedDate) ? s.streak + 1 : 1;
+      const nextStreak =
+        s.lastCompletedDate && isYesterday(s.lastCompletedDate) ? s.streak + 1 : 1;
+
       const nextDay = s.committed ? clamp(s.challengeDay + 1, 0, 7) : s.challengeDay;
 
       const earnedXp = 25;
@@ -230,6 +244,8 @@ export default function DomainPage({ params }: { params: Params }) {
     setMissionOpen(false);
     setAnsweredCorrectly(null);
     setSelectedAnswer(null);
+    setQuestionIdx(0);
+    setMissionLen(3);
   }
 
   function handleAnswer(idx: number) {
@@ -252,7 +268,6 @@ export default function DomainPage({ params }: { params: Params }) {
   }
 
   function aceResponse(): { title: string; body: string } {
-    // Kid-safe, short, calm, specific. No overwhelm.
     if (!aceMode) return { title: "Ace", body: "" };
 
     if (aceMode.type === "feeling") {
@@ -260,8 +275,7 @@ export default function DomainPage({ params }: { params: Params }) {
       if (f === "I feel frustrated") {
         return {
           title: "Ace",
-          body:
-            "You’re safe. We can do hard things.\n\nWant to do one tiny step… or take a quick win?",
+          body: "You’re safe. We can do hard things.\n\nWant to do one tiny step… or take a quick win?",
         };
       }
       if (f === "I’m confused") {
@@ -274,15 +288,13 @@ export default function DomainPage({ params }: { params: Params }) {
       if (f === "I don’t know what to do") {
         return {
           title: "Ace",
-          body:
-            "No problem. Here’s the next step:\n\n1) Tap a card.\n2) We do one question.\n3) We celebrate. ✨",
+          body: "No problem. Here’s the next step:\n\n1) Tap a card.\n2) We do one question.\n3) We celebrate. ✨",
         };
       }
       if (f === "This is too easy") {
         return {
           title: "Ace",
-          body:
-            "Love that. Want a harder one?\n\nI can make the numbers bigger or add a timer.",
+          body: "Love that. Want a harder one?\n\nI can make the numbers bigger or add a timer.",
         };
       }
       if (f === "This is too hard") {
@@ -303,7 +315,6 @@ export default function DomainPage({ params }: { params: Params }) {
       };
     }
 
-    // feedback
     return {
       title: "Ace",
       body: "Tell me what felt confusing, and I’ll help right now — and I’ll remember it for next time.",
@@ -311,14 +322,21 @@ export default function DomainPage({ params }: { params: Params }) {
   }
 
   function quickWin() {
-    // “Take a quick win”: make the next question easier (just jump to the easy bank for this run)
+    // ✅ Now actually changes the mission to 1 question
     setToast("Quick win mode! One easier question, then we celebrate. 🌟");
+    setMissionLen(1);
     setQuestionIdx(0);
+    setSelectedAnswer(null);
+    setAnsweredCorrectly(null);
   }
 
   function smallerOne() {
-    setToast("Smaller step mode! We’ll do fewer questions today. ✅");
-    // One-question mission: correct answer completes
+    // ✅ Now actually changes the mission to 1 question
+    setToast("Smaller step mode! One question today — then we celebrate. ✅");
+    setMissionLen(1);
+    setQuestionIdx(0);
+    setSelectedAnswer(null);
+    setAnsweredCorrectly(null);
   }
 
   function submitFeedback() {
@@ -331,7 +349,6 @@ export default function DomainPage({ params }: { params: Params }) {
       feedbackText,
     };
 
-    // For now: local log (Parent dashboard later reads this)
     const key = `noraliva:feedback`;
     const existing = (() => {
       try {
@@ -354,9 +371,7 @@ export default function DomainPage({ params }: { params: Params }) {
     return (
       <main className="mx-auto max-w-3xl p-8">
         <h1 className="text-2xl font-bold">Unknown domain</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          This domain doesn’t exist yet.
-        </p>
+        <p className="mt-2 text-sm text-neutral-600">This domain doesn’t exist yet.</p>
         <div className="mt-6">
           <Link href={`/learners/${learnerId}/domains`} className="underline">
             ← Back to domains
@@ -449,10 +464,10 @@ export default function DomainPage({ params }: { params: Params }) {
                 </button>
               ) : (
                 <div className="rounded-2xl border px-4 py-3 text-sm">
-                  <div className="font-semibold">7-Day {isMath ? "Math" : formatDomain(domainId)} Quest</div>
-                  <div className="mt-1 text-neutral-600">
-                    Reward: Mystery Unlock 🎁
+                  <div className="font-semibold">
+                    7-Day {isMath ? "Math" : formatDomain(domainId)} Quest
                   </div>
+                  <div className="mt-1 text-neutral-600">Reward: Mystery Unlock 🎁</div>
                 </div>
               )}
 
@@ -508,7 +523,8 @@ export default function DomainPage({ params }: { params: Params }) {
                 <button
                   key={n.id}
                   onClick={() => {
-                    if (n.predictedStruggle) openAce({ type: "help", context: `predicted struggle: ${n.title}` });
+                    if (n.predictedStruggle)
+                      openAce({ type: "help", context: `predicted struggle: ${n.title}` });
                     else setToast(`${n.title}: ${n.subtitle}`);
                   }}
                   className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${
@@ -532,7 +548,11 @@ export default function DomainPage({ params }: { params: Params }) {
                       <span className="text-xs text-neutral-600">Ace can help</span>
                     )}
                     <span className="rounded-full border px-3 py-1 text-xs font-semibold">
-                      {n.status === "done" ? "✅ Done" : n.status === "ready" ? "➡️ Ready" : "🔒 Locked"}
+                      {n.status === "done"
+                        ? "✅ Done"
+                        : n.status === "ready"
+                        ? "➡️ Ready"
+                        : "🔒 Locked"}
                     </span>
                   </div>
                 </button>
@@ -559,9 +579,7 @@ export default function DomainPage({ params }: { params: Params }) {
           {/* One-tap feelings */}
           <div className="rounded-3xl border bg-white p-6 shadow-sm">
             <div className="text-lg font-bold">Need help?</div>
-            <div className="mt-1 text-sm text-neutral-600">
-              One tap — Ace will help.
-            </div>
+            <div className="mt-1 text-sm text-neutral-600">One tap — Ace will help.</div>
 
             <div className="mt-4 grid gap-2">
               {[
@@ -584,7 +602,8 @@ export default function DomainPage({ params }: { params: Params }) {
             <div className="mt-6 rounded-2xl bg-neutral-50 p-4 text-sm">
               <div className="font-semibold">Tip:</div>
               <div className="mt-1 text-neutral-700">
-                If Ace pops up, you can choose: <span className="font-semibold">Try again</span> or{" "}
+                If Ace pops up, you can choose:{" "}
+                <span className="font-semibold">Try again</span> or{" "}
                 <span className="font-semibold">One more example</span>.
               </div>
             </div>
@@ -597,7 +616,9 @@ export default function DomainPage({ params }: { params: Params }) {
             <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-xl font-extrabold">Mission: {formatDomain(domainId)}</div>
+                  <div className="text-xl font-extrabold">
+                    Mission: {formatDomain(domainId)}
+                  </div>
                   <div className="mt-1 text-sm text-neutral-600">
                     Skill: <span className="font-semibold">{current.skill}</span>
                   </div>
@@ -649,9 +670,7 @@ export default function DomainPage({ params }: { params: Params }) {
                     Ask Ace
                   </button>
                   <button
-                    onClick={() => {
-                      setToast("Hint: Try counting up (or making a ten).");
-                    }}
+                    onClick={() => setToast("Hint: Try counting up (or making a ten).")}
                     className="rounded-2xl border px-4 py-2 text-sm font-semibold hover:bg-neutral-50"
                   >
                     Hint
@@ -672,12 +691,12 @@ export default function DomainPage({ params }: { params: Params }) {
                 {/* Next / complete */}
                 <div className="mt-6 flex items-center justify-between">
                   <div className="text-sm text-neutral-600">
-                    Question {questionIdx + 1} / 3
+                    Question {questionIdx + 1} / {missionLen}
                   </div>
 
                   <div className="flex gap-2">
                     {answeredCorrectly === true ? (
-                      questionIdx >= 2 ? (
+                      isLastQuestion ? (
                         <button
                           onClick={completeMission}
                           className="rounded-2xl bg-green-600 px-5 py-2 text-sm font-semibold text-white"
@@ -695,7 +714,6 @@ export default function DomainPage({ params }: { params: Params }) {
                     ) : answeredCorrectly === false ? (
                       <button
                         onClick={() => {
-                          // Let them try again
                           setSelectedAnswer(null);
                           setAnsweredCorrectly(null);
                         }}
@@ -719,7 +737,8 @@ export default function DomainPage({ params }: { params: Params }) {
                   <div className="mt-4 rounded-2xl bg-neutral-50 p-4 text-sm">
                     <div className="font-semibold">Elle Mode 💛</div>
                     <div className="mt-1 text-neutral-700">
-                      If it feels hard, we can do just <span className="font-semibold">one</span> question today.
+                      If it feels hard, we can do just{" "}
+                      <span className="font-semibold">one</span> question today.
                     </div>
                     <div className="mt-2">
                       <button
