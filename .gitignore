@@ -1,6 +1,41 @@
-node_modules
-.next
-.env.local
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Build / TypeScript
+*.tsbuildinfo
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+blob-report/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env (keep .env.example)
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# Vercel
 .vercel
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

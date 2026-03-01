@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getUserAppRole, getDashboardPath } from "@/lib/auth/getUserAppRole";
+import { getParentViewData, type ChildProgress } from "@/lib/db/getParentViewData";
 import type { Profile } from "@/lib/supabase/types";
 
 export default function V2ParentDashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [progress, setProgress] = useState<ChildProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -31,6 +33,12 @@ export default function V2ParentDashboardPage() {
         .eq("id", user.id)
         .single();
       setProfile(p ?? null);
+      try {
+        const data = await getParentViewData();
+        setProgress(data);
+      } catch {
+        setProgress([]);
+      }
       setLoading(false);
     })();
   }, [router, supabase]);
@@ -85,6 +93,44 @@ export default function V2ParentDashboardPage() {
             Back to prototype home
           </Link>
         </div>
+
+        {progress.length > 0 && (
+          <div className="mt-8 space-y-6">
+            <h2 className="text-lg font-semibold text-slate-900">Learner progress</h2>
+            {progress.map((child) => (
+              <div key={child.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="font-medium text-slate-900">{child.display_name} ({child.role})</h3>
+                <div className="mt-3">
+                  <h4 className="text-sm font-medium text-slate-600">Attempts</h4>
+                  {child.attempts.length === 0 ? (
+                    <p className="text-sm text-slate-500">No attempts yet.</p>
+                  ) : (
+                    <ul className="mt-1 list-inside list-disc text-sm text-slate-700">
+                      {child.attempts.slice(0, 10).map((a) => (
+                        <li key={a.id}>
+                          {a.prompt} — {a.correct ? "Correct" : "Incorrect"} ({new Date(a.created_at).toLocaleString()})
+                        </li>
+                      ))}
+                      {child.attempts.length > 10 && <li>… and {child.attempts.length - 10} more</li>}
+                    </ul>
+                  )}
+                </div>
+                <div className="mt-3">
+                  <h4 className="text-sm font-medium text-slate-600">Skill mastery</h4>
+                  {child.mastery.length === 0 ? (
+                    <p className="text-sm text-slate-500">No mastery data yet.</p>
+                  ) : (
+                    <ul className="mt-1 text-sm text-slate-700">
+                      {child.mastery.map((m, i) => (
+                        <li key={i}>{m.skill_name}: level {m.level}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
