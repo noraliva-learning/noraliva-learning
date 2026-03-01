@@ -9,18 +9,19 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "check:env": "tsx scripts/check-env.ts",
     "env:check": "tsx scripts/check-env.ts",
     "env:fix": "tsx scripts/fix-env-file.ts",
     "bootstrap:users": "npm run env:check && tsx scripts/bootstrap-users.ts",
-    "dev:clean": "npm run env:check && next dev"
+    "dev:clean": "npm run env:check && next dev",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.45.4",
     "framer-motion": "^11.18.2",
-    "next": "14.2.5",
+    "next": "^14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zod": "^3.23.8"
@@ -34,6 +35,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",
+    "patch-package": "^8.0.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "tsx": "^4.19.2",

@@ -1,0 +1,21 @@
+diff --git a/node_modules/next/dist/server/web/sandbox/context.js b/node_modules/next/dist/server/web/sandbox/context.js
+index 64ad82d..1f85b9f 100644
+--- a/node_modules/next/dist/server/web/sandbox/context.js
++++ b/node_modules/next/dist/server/web/sandbox/context.js
+@@ -93,13 +93,14 @@ async function loadWasm(wasm) {
+     return modules;
+ }
+ function buildEnvironmentVariablesFrom(injectedEnvironments) {
++    const safeEnv = injectedEnvironments ?? {};
+     const pairs = Object.keys(process.env).map((key)=>[
+             key,
+             process.env[key]
+         ]);
+     const env = Object.fromEntries(pairs);
+-    for (const key of Object.keys(injectedEnvironments)){
+-        env[key] = injectedEnvironments[key];
++    for (const key of Object.keys(safeEnv)){
++        env[key] = safeEnv[key];
+     }
+     env.NEXT_RUNTIME = "edge";
+     return env;
