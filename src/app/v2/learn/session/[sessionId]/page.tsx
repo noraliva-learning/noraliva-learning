@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { getNextExercise } from '@/lib/db/getNextExercise';
 import { EndSessionButton } from './SessionActions';
 import { SessionQuestion } from './SessionQuestion';
 
@@ -57,40 +58,7 @@ export default async function SessionPage({ params }: Props) {
   const learnerSlug = profile?.role === 'liv' || profile?.role === 'elle' ? profile.role : 'liv';
   const domainLabel = session.domain.charAt(0).toUpperCase() + session.domain.slice(1);
 
-  // Fetch one exercise for this domain (vertical slice: math has one seeded exercise)
-  const { data: domains } = await supabase
-    .from('domains')
-    .select('id')
-    .eq('slug', session.domain)
-    .limit(1);
-
-  let exercise: { id: string; prompt: string } | null = null;
-  const domain = domains?.[0] ?? null;
-  if (domain) {
-    const { data: skills } = await supabase
-      .from('skills')
-      .select('id')
-      .eq('domain_id', domain.id)
-      .limit(1);
-    const skill = skills?.[0] ?? null;
-    if (skill) {
-      const { data: lessons } = await supabase
-        .from('lessons')
-        .select('id')
-        .eq('skill_id', skill.id)
-        .limit(1);
-      const lesson = lessons?.[0] ?? null;
-      if (lesson) {
-        const { data: exercises } = await supabase
-          .from('exercises')
-          .select('id, prompt')
-          .eq('lesson_id', lesson.id)
-          .limit(1);
-        const ex = exercises?.[0] ?? null;
-        if (ex) exercise = { id: ex.id, prompt: ex.prompt };
-      }
-    }
-  }
+  const exercise = await getNextExercise(session.domain);
 
   return (
     <main className="min-h-screen p-6">

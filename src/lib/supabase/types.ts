@@ -25,11 +25,23 @@ export interface Domain {
   updated_at: string;
 }
 
-export interface Skill {
+export interface Unit {
   id: string;
   domain_id: string;
   slug: string;
   name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Skill {
+  id: string;
+  domain_id: string;
+  unit_id: string | null;
+  slug: string;
+  name: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -38,6 +50,7 @@ export interface Lesson {
   id: string;
   skill_id: string;
   title: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +59,7 @@ export interface Exercise {
   id: string;
   lesson_id: string;
   prompt: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
