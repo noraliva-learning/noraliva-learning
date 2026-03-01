@@ -6,11 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check:env": "tsx scripts/check-env.ts",
+    "env:check": "tsx scripts/check-env.ts",
+    "env:fix": "tsx scripts/fix-env-file.ts",
+    "bootstrap:users": "npm run env:check && tsx scripts/bootstrap-users.ts",
+    "dev:clean": "npm run env:check && next dev"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.45.4",
-    "framer-motion": "^11.0.0",
+    "framer-motion": "^11.18.2",
     "next": "14.2.5",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -21,10 +27,11 @@
     "@types/react": "^18.2.79",
     "@types/react-dom": "^18.2.25",
     "autoprefixer": "^10.4.19",
-    "eslint": "^8.57.0",
+    "dotenv":"^16.4.5","eslint": "^8.57.0",
     "eslint-config-next": "14.2.5",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
+    "tsx": "^4.19.2",
     "typescript": "^5.4.5"
   }
 }

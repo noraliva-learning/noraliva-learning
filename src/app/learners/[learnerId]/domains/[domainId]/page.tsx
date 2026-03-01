@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { getLearnerProfile } from "@/lib/learners";
+import { getDailyMission, type Mission } from "@/lib/missions";
+import { speak, stopSpeaking } from "@/components/AceVoice";
+import AceFace from "@/components/AceFace";
+import { playCorrect, playWrong, playCelebrate } from "@/lib/sounds";
+import VoiceInput from "@/components/VoiceInput";
 
 type Params = { learnerId: string; domainId: string };
 
@@ -95,6 +100,7 @@ export default function DomainPage({ params }: { params: Params }) {
   const [toast, setToast] = useState<string | null>(null);
 
   // “Mission” state
+  const [mission, setMission] = useState<Mission | null>(null);
   const [missionOpen, setMissionOpen] = useState(false);
   const [missionLen, setMissionLen] = useState<1 | 3>(3); // ✅ NEW: 1-question or 3-question mission
   const [questionIdx, setQuestionIdx] = useState(0);
@@ -174,25 +180,36 @@ export default function DomainPage({ params }: { params: Params }) {
     return { day, checks };
   }, [state.challengeDay]);
 
-  // A tiny “question bank” placeholder (we’ll replace with generated content later)
-  const questions = useMemo(() => {
-    const easy = [
-      { q: "2 + 1 = ?", a: ["2", "3", "4"], correct: 1, skill: "Adding small numbers" },
-      { q: "5 − 2 = ?", a: ["3", "2", "4"], correct: 0, skill: "Subtracting small numbers" },
-      { q: "3 + 3 = ?", a: ["5", "6", "7"], correct: 1, skill: "Adding doubles" },
-    ];
-    const liv = [
-      { q: "12 + 5 = ?", a: ["16", "17", "18"], correct: 1, skill: "Adding within 20" },
-      { q: "18 − 9 = ?", a: ["9", "10", "8"], correct: 0, skill: "Subtracting within 20" },
-      { q: "7 + 8 = ?", a: ["14", "15", "16"], correct: 1, skill: "Make-a-ten strategy" },
-    ];
-    return learner.id === "elle" ? easy : liv;
-  }, [learner.id]);
-
-  const current = questions[questionIdx % questions.length];
-
   const missionLastIndex = missionLen - 1;
   const isLastQuestion = questionIdx >= missionLastIndex;
+
+  const questions = mission?.questions ?? [];
+  const currentQuestion = questions[questionIdx];
+
+  // Speak question when it appears (kid-friendly TTS)
+  const questionPromptRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!missionOpen || !currentQuestion?.prompt) return;
+    if (questionPromptRef.current === currentQuestion.prompt) return;
+    questionPromptRef.current = currentQuestion.prompt;
+    speak(currentQuestion.prompt);
+    return () => {
+      stopSpeaking();
+    };
+  }, [missionOpen, currentQuestion?.prompt]);
+
+  // Speak Ace helper response when Ace modal opens
+  const aceBodyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showAce) {
+      aceBodyRef.current = null;
+      return;
+    }
+    const { body } = aceResponse();
+    if (!body || aceBodyRef.current === body) return;
+    aceBodyRef.current = body;
+    speak(body);
+  }, [showAce, aceMode, lastMistakes, currentQuestion?.prompt]);
 
   function openAce(payload: NonNullable<typeof aceMode>) {
     setAceMode(payload);
@@ -205,7 +222,11 @@ export default function DomainPage({ params }: { params: Params }) {
   }
 
   function startMission() {
-    setMissionLen(3); // ✅ Reset to normal mission when starting fresh
+    const daily = getDailyMission(learnerId, domainId, todayKey());
+    setMission(daily);
+    const desiredLen =
+      daily.questions.length >= 3 ? 3 : 1; // keep missionLen in {1,3} but never exceed available
+    setMissionLen(desiredLen as 1 | 3);
     setMissionOpen(true);
     setQuestionIdx(0);
     setSelectedAnswer(null);
@@ -240,6 +261,7 @@ export default function DomainPage({ params }: { params: Params }) {
       };
     });
 
+    playCelebrate();
     setToast("Mission complete! 🎉 Nice work.");
     setMissionOpen(false);
     setAnsweredCorrectly(null);
@@ -249,13 +271,18 @@ export default function DomainPage({ params }: { params: Params }) {
   }
 
   function handleAnswer(idx: number) {
+    if (!currentQuestion) return;
+
     setSelectedAnswer(idx);
-    const correct = idx === current.correct;
+    const correct = idx === currentQuestion.correctIndex;
     setAnsweredCorrectly(correct);
 
-    if (!correct) {
+    if (correct) {
+      playCorrect();
+    } else {
+      playWrong();
       setLastMistakes((m) => {
-        const next = [current.skill, ...m];
+        const next = [currentQuestion.skill, ...m];
         return next.slice(0, 3);
       });
     }
@@ -311,7 +338,9 @@ export default function DomainPage({ params }: { params: Params }) {
       return {
         title: "Ace",
         body:
-          `${mistakes}Let’s do this one together:\n\n${current.q}\n\nTip: Try counting up on your fingers.\nExample: 12 + 5 → 12…13,14,15,16,17.\n\nWant to try again, or want one more example?`,
+          `${mistakes}Let’s do this one together:\n\n${
+            currentQuestion?.prompt ?? ""
+          }\n\nTip: Try counting up on your fingers.\nExample: 12 + 5 → 12…13,14,15,16,17.\n\nWant to try again, or want one more example?`,
       };
     }
 
@@ -611,7 +640,7 @@ export default function DomainPage({ params }: { params: Params }) {
         </div>
 
         {/* Mission modal */}
-        {missionOpen && (
+        {missionOpen && currentQuestion && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
               <div className="flex items-start justify-between gap-3">
@@ -620,23 +649,38 @@ export default function DomainPage({ params }: { params: Params }) {
                     Mission: {formatDomain(domainId)}
                   </div>
                   <div className="mt-1 text-sm text-neutral-600">
-                    Skill: <span className="font-semibold">{current.skill}</span>
+                    Skill: <span className="font-semibold">{currentQuestion.skill}</span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setMissionOpen(false)}
-                  className="rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-neutral-50"
+                  className="rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-neutral-50 min-h-[44px] min-w-[44px]"
+                  aria-label="Close"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mt-6 rounded-2xl border p-5">
-                <div className="text-lg font-bold">{current.q}</div>
+              {/* Animated Ace face — reacts to answer */}
+              <div className="mt-4 flex justify-center">
+                <AceFace
+                  mood={
+                    answeredCorrectly === null
+                      ? "idle"
+                      : answeredCorrectly
+                      ? "celebrating"
+                      : "encouraging"
+                  }
+                  size="lg"
+                />
+              </div>
 
-                <div className="mt-4 grid gap-2">
-                  {current.a.map((opt, idx) => {
+              <div className="mt-4 rounded-2xl border p-5">
+                <div className="text-lg font-bold">{currentQuestion.prompt}</div>
+
+                <div className="mt-4 grid gap-3">
+                  {currentQuestion.options.map((opt, idx) => {
                     const isSelected = selectedAnswer === idx;
                     const showResult = answeredCorrectly !== null && isSelected;
 
@@ -645,13 +689,13 @@ export default function DomainPage({ params }: { params: Params }) {
                         key={opt}
                         disabled={answeredCorrectly !== null}
                         onClick={() => handleAnswer(idx)}
-                        className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                        className={`rounded-2xl border-2 px-5 py-4 text-left text-base font-semibold transition min-h-[52px] touch-manipulation ${
                           answeredCorrectly === null
-                            ? "hover:bg-neutral-50"
+                            ? "hover:bg-neutral-50 active:bg-neutral-100"
                             : showResult && answeredCorrectly
-                            ? "border-green-600 bg-green-50"
+                            ? "border-green-500 bg-green-50 text-green-800"
                             : showResult && !answeredCorrectly
-                            ? "border-red-600 bg-red-50"
+                            ? "border-amber-400 bg-amber-50 text-amber-900"
                             : "opacity-80"
                         }`}
                       >
@@ -661,17 +705,17 @@ export default function DomainPage({ params }: { params: Params }) {
                   })}
                 </div>
 
-                {/* Help buttons */}
-                <div className="mt-5 flex flex-wrap items-center gap-2">
+                {/* Help buttons — large touch targets for kids */}
+                <div className="mt-5 flex flex-wrap items-center gap-3">
                   <button
                     onClick={() => openAce({ type: "help", context: "in-question" })}
-                    className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                    className="rounded-2xl bg-black px-5 py-3 text-base font-semibold text-white min-h-[48px] touch-manipulation"
                   >
                     Ask Ace
                   </button>
                   <button
                     onClick={() => setToast("Hint: Try counting up (or making a ten).")}
-                    className="rounded-2xl border px-4 py-2 text-sm font-semibold hover:bg-neutral-50"
+                    className="rounded-2xl border-2 px-5 py-3 text-base font-semibold hover:bg-neutral-50 min-h-[48px] touch-manipulation"
                   >
                     Hint
                   </button>
@@ -680,7 +724,7 @@ export default function DomainPage({ params }: { params: Params }) {
                     {answeredCorrectly === false && (
                       <button
                         onClick={() => openAce({ type: "feeling", feeling: "I feel frustrated" })}
-                        className="rounded-2xl border px-4 py-2 text-sm font-semibold hover:bg-neutral-50"
+                        className="rounded-2xl border-2 px-5 py-3 text-base font-semibold hover:bg-neutral-50 min-h-[48px] touch-manipulation"
                       >
                         I feel frustrated
                       </button>
@@ -717,14 +761,14 @@ export default function DomainPage({ params }: { params: Params }) {
                           setSelectedAnswer(null);
                           setAnsweredCorrectly(null);
                         }}
-                        className="rounded-2xl border px-5 py-2 text-sm font-semibold hover:bg-neutral-50"
+                        className="rounded-2xl border-2 px-6 py-3 text-base font-semibold hover:bg-amber-50 border-amber-200 min-h-[48px] touch-manipulation"
                       >
-                        Try again
+                        Try again 💛
                       </button>
                     ) : (
                       <button
                         onClick={() => setToast("Pick an answer, then we’ll go!")}
-                        className="rounded-2xl border px-5 py-2 text-sm font-semibold hover:bg-neutral-50"
+                        className="rounded-2xl border-2 px-6 py-3 text-base font-semibold hover:bg-neutral-50 min-h-[48px] touch-manipulation"
                       >
                         Next →
                       </button>
@@ -764,21 +808,25 @@ export default function DomainPage({ params }: { params: Params }) {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-extrabold">💬 Ace</div>
-                  <div className="mt-1 text-sm text-neutral-600">
-                    Helper buddy mode (kid-safe)
+                <div className="flex items-center gap-3">
+                  <AceFace mood="happy" size="sm" />
+                  <div>
+                    <div className="text-lg font-extrabold">💬 Ace</div>
+                    <div className="mt-1 text-sm text-neutral-600">
+                      Helper buddy (kid-safe)
+                    </div>
                   </div>
                 </div>
                 <button
                   onClick={closeAce}
-                  className="rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-neutral-50"
+                  className="rounded-xl border-2 px-4 py-2 text-sm font-semibold hover:bg-neutral-50 min-h-[44px] min-w-[44px]"
+                  aria-label="Close"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mt-4 whitespace-pre-line rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-800">
+              <div className="mt-4 whitespace-pre-line rounded-2xl bg-neutral-50 p-4 text-base text-neutral-800">
                 <div className="font-semibold">{aceResponse().title}</div>
                 <div className="mt-2">{aceResponse().body}</div>
               </div>
@@ -853,15 +901,22 @@ export default function DomainPage({ params }: { params: Params }) {
                     ))}
                   </div>
 
-                  <textarea
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder="Tell Ace what was confusing…"
-                    className="w-full rounded-2xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
-                    rows={4}
-                  />
+                  <div className="flex gap-2 items-start">
+                    <textarea
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      placeholder="Tell Ace what was confusing… (or tap the mic to speak)"
+                      className="flex-1 min-h-[48px] rounded-2xl border-2 border-neutral-200 p-3 text-base outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                      rows={4}
+                    />
+                    <VoiceInput
+                      onResult={(text) => setFeedbackText((prev) => (prev ? `${prev} ${text}` : text))}
+                      largeTouchTarget
+                      className="shrink-0"
+                    />
+                  </div>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 mt-2">
                     <button
                       onClick={submitFeedback}
                       className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white"
