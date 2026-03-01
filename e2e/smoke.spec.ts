@@ -5,7 +5,7 @@ test('home page loads', async ({ page }) => {
   await expect(page).toHaveTitle(/Liv|Learning|Arcade/i);
 });
 
-test('v2 login page is reachable', async ({ page }) => {
+test('v2 login page is reachable (regression: prod server middleware / edge sandbox)', async ({ page }) => {
   await page.goto('/v2/login');
   await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
 });

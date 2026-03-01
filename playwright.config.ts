@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
 import path from 'path';
 
-// Ensure webServer always gets a plain object (Next 14.2.x Edge runtime crashes on undefined env)
+// Ensure webServer gets env for prod server (e.g. NEXT_PUBLIC_* from .env.local)
 const envLocalPath = path.join(__dirname, '.env.local');
 const parsed = loadEnv({ path: envLocalPath }).parsed ?? {};
 const webServerEnv: NodeJS.ProcessEnv = { ...process.env, ...parsed };
@@ -20,7 +20,7 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
