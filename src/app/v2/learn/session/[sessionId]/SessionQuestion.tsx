@@ -1,14 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { submitAnswer } from '@/lib/db/submitAnswer';
 
 type Props = {
   exerciseId: string;
   prompt: string;
+  sessionId: string;
+  domainSlug: string;
 };
 
-export function SessionQuestion({ exerciseId, prompt }: Props) {
+export function SessionQuestion({ exerciseId, prompt, sessionId, domainSlug }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ correct: boolean; masteryLevel: number } | null>(null);
@@ -37,6 +40,12 @@ export function SessionQuestion({ exerciseId, prompt }: Props) {
         <p className="mt-1 text-sm text-slate-600">
           Mastery level for this skill: {result.masteryLevel}
         </p>
+        <Link
+          href={`/v2/learn/session/${sessionId}?lastExerciseId=${encodeURIComponent(exerciseId)}`}
+          className="mt-3 inline-block rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+        >
+          Next question
+        </Link>
       </div>
     );
   }

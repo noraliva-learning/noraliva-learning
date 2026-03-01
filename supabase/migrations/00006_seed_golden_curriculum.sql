@@ -24,7 +24,12 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Backfill math skill with unit_id (from 00004)
 UPDATE public.skills
-SET unit_id = (SELECT id FROM public.units WHERE domain_id = (SELECT id FROM public.domains WHERE slug = 'math' LIMIT 1) LIMIT 1),
+SET unit_id = (
+      SELECT id
+      FROM public.units
+      WHERE domain_id = (SELECT id FROM public.domains WHERE slug = 'math' LIMIT 1)
+      LIMIT 1
+    ),
     sort_order = 0
 WHERE slug = 'addition-basic'
   AND domain_id = (SELECT id FROM public.domains WHERE slug = 'math' LIMIT 1)
@@ -43,7 +48,8 @@ SELECT
   d.id,
   u.id,
   'sight-words-basic',
-  'Sight words'
+  'Sight words',
+  0
 FROM public.domains d
 JOIN public.units u ON u.domain_id = d.id AND u.slug = 'foundations'
 WHERE d.slug = 'reading'
@@ -65,7 +71,8 @@ INSERT INTO public.exercises (id, lesson_id, prompt, sort_order)
 SELECT
   'c0000002-0001-4000-8000-000000000002'::uuid,
   l.id,
-  'Which word is "the"?'
+  'Which word is "the"?',
+  0
 FROM public.lessons l
 WHERE l.title = 'Recognize sight words'
 LIMIT 1
@@ -80,7 +87,8 @@ SELECT
   d.id,
   u.id,
   'sentences-basic',
-  'Simple sentences'
+  'Simple sentences',
+  0
 FROM public.domains d
 JOIN public.units u ON u.domain_id = d.id AND u.slug = 'foundations'
 WHERE d.slug = 'writing'
@@ -118,7 +126,8 @@ SELECT
   d.id,
   u.id,
   'shapes-basic',
-  'Basic shapes'
+  'Basic shapes',
+  0
 FROM public.domains d
 JOIN public.units u ON u.domain_id = d.id AND u.slug = 'foundations'
 WHERE d.slug = 'architecture'
@@ -156,7 +165,8 @@ SELECT
   d.id,
   u.id,
   'greetings-basic',
-  'Greetings'
+  'Greetings',
+  0
 FROM public.domains d
 JOIN public.units u ON u.domain_id = d.id AND u.slug = 'foundations'
 WHERE d.slug = 'spanish'

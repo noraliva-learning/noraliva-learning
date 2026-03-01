@@ -6,10 +6,13 @@ import { SessionQuestion } from './SessionQuestion';
 
 type Props = {
   params: { sessionId: string };
+  searchParams: Promise<{ lastExerciseId?: string }>;
 };
 
-export default async function SessionPage({ params }: Props) {
+export default async function SessionPage({ params, searchParams }: Props) {
   const { sessionId } = params;
+  const resolved = await searchParams;
+  const lastExerciseId = resolved?.lastExerciseId ?? null;
   const supabase = await createClient();
 
   const {
@@ -58,7 +61,7 @@ export default async function SessionPage({ params }: Props) {
   const learnerSlug = profile?.role === 'liv' || profile?.role === 'elle' ? profile.role : 'liv';
   const domainLabel = session.domain.charAt(0).toUpperCase() + session.domain.slice(1);
 
-  const exercise = await getNextExercise(session.domain);
+  const exercise = await getNextExercise(session.domain, lastExerciseId);
 
   return (
     <main className="min-h-screen p-6">
@@ -89,7 +92,12 @@ export default async function SessionPage({ params }: Props) {
         </dl>
 
         {exercise ? (
-          <SessionQuestion exerciseId={exercise.id} prompt={exercise.prompt} />
+          <SessionQuestion
+            exerciseId={exercise.id}
+            prompt={exercise.prompt}
+            sessionId={sessionId}
+            domainSlug={session.domain}
+          />
         ) : (
           <p className="mt-6 text-slate-600">No exercises for this domain yet.</p>
         )}

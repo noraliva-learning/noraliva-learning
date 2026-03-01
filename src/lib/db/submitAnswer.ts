@@ -1,9 +1,11 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { updateMasteryFromCounts, scheduleNextReview } from '@/lib/mastery/masteryEngine';
 
 /**
- * Submits one answer: writes an Attempt, upserts Skill Mastery, returns updated mastery level.
+ * Submits one answer: writes an Attempt, upserts Skill Mastery (Bayesian update),
+ * schedules spaced repetition, returns updated mastery level.
  * RLS ensures only the learner (or parent) can write.
  */
 export async function submitAnswer(exerciseId: string, correct: boolean) {
@@ -47,29 +49,76 @@ export async function submitAnswer(exerciseId: string, correct: boolean) {
 
   if (attemptError) throw new Error(attemptError.message);
 
-  // Upsert skill_mastery: increment level if correct, else keep current (or 0)
-  const { data: existing } = await supabase
-    .from('skill_mastery')
-    .select('id, level')
-    .eq('learner_id', learnerId)
-    .eq('skill_id', skillId)
-    .maybeSingle();
+  const now = new Date();
 
-  const newLevel = correct
-    ? (existing?.level ?? 0) + 1
-    : (existing?.level ?? 0);
+  const skillExerciseIds = await getExerciseIdsForSkill(supabase, skillId);
+
+  // Count attempts for this learner+skill (include the one we just inserted)
+  const { data: attemptRows } = await supabase
+    .from('attempts')
+    .select('exercise_id, correct')
+    .eq('learner_id', learnerId);
+
+  const skillAttempts = (attemptRows ?? []).filter((a) => skillExerciseIds.has(a.exercise_id));
+  const totalAttempts = skillAttempts.length;
+  const totalCorrect = skillAttempts.filter((a) => a.correct).length;
+
+  const updated = updateMasteryFromCounts(
+    totalAttempts - 1,
+    totalCorrect - (correct ? 1 : 0),
+    correct
+  );
+  const nextReviewAt = scheduleNextReview(correct, updated.mastery_probability, now);
+
+  // Keep level for backward compat (e.g. parent view): derive from mastery_probability
+  const level = Math.min(5, Math.max(0, Math.round(updated.mastery_probability * 5)));
 
   const { error: masteryError } = await supabase.from('skill_mastery').upsert(
     {
       learner_id: learnerId,
       skill_id: skillId,
-      level: newLevel,
-      updated_at: new Date().toISOString(),
+      level,
+      mastery_probability: updated.mastery_probability,
+      confidence_score: updated.confidence_score,
+      attempts_count: totalAttempts,
+      last_attempt_at: now.toISOString(),
+      next_review_at: nextReviewAt.toISOString(),
+      updated_at: now.toISOString(),
     },
     { onConflict: 'learner_id,skill_id' }
   );
 
   if (masteryError) throw new Error(masteryError.message);
 
-  return { masteryLevel: newLevel };
+  // Upsert spaced repetition schedule (single source of truth for "when to review")
+  const { error: reviewError } = await supabase.from('review_schedule').upsert(
+    {
+      learner_id: learnerId,
+      skill_id: skillId,
+      next_review_at: nextReviewAt.toISOString(),
+      updated_at: now.toISOString(),
+    },
+    { onConflict: 'learner_id,skill_id' }
+  );
+
+  if (reviewError) throw new Error(reviewError.message);
+
+  return { masteryLevel: level };
+}
+
+async function getExerciseIdsForSkill(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  skillId: string
+): Promise<Set<string>> {
+  const { data: lessons } = await supabase
+    .from('lessons')
+    .select('id')
+    .eq('skill_id', skillId);
+  if (!lessons?.length) return new Set();
+  const lessonIds = lessons.map((l) => l.id);
+  const { data: exs } = await supabase
+    .from('exercises')
+    .select('id')
+    .in('lesson_id', lessonIds);
+  return new Set((exs ?? []).map((e) => e.id));
 }
