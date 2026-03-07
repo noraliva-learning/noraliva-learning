@@ -14,12 +14,16 @@ export async function getUserAppRole(
   supabase: SupabaseClient,
   user: Pick<User, "id" | "email">
 ): Promise<AppRoleResult> {
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
 
+  if (profileError) {
+    console.error("[getUserAppRole] profiles query error:", profileError.message, "code:", profileError.code);
+    throw new Error(profileError.message);
+  }
   const role = profile?.role;
   if (role === "parent") return { role: "parent" };
   if (role === "liv") return { role: "learner", learnerSlug: "liv" };

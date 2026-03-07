@@ -1,18 +1,13 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { getNextExercise } from '@/lib/db/getNextExercise';
-import { EndSessionButton } from './SessionActions';
-import { SessionQuestion } from './SessionQuestion';
+import { SessionFlow } from './SessionFlow';
 
 type Props = {
-  params: { sessionId: string };
-  searchParams: Promise<{ lastExerciseId?: string }>;
+  params: Promise<{ sessionId: string }>;
 };
 
-export default async function SessionPage({ params, searchParams }: Props) {
-  const { sessionId } = params;
-  const resolved = await searchParams;
-  const lastExerciseId = resolved?.lastExerciseId ?? null;
+export default async function SessionPage({ params }: Props) {
+  const { sessionId } = await params;
   const supabase = await createClient();
 
   const {
@@ -61,8 +56,6 @@ export default async function SessionPage({ params, searchParams }: Props) {
   const learnerSlug = profile?.role === 'liv' || profile?.role === 'elle' ? profile.role : 'liv';
   const domainLabel = session.domain.charAt(0).toUpperCase() + session.domain.slice(1);
 
-  const exercise = await getNextExercise(session.domain, lastExerciseId);
-
   return (
     <main className="min-h-screen p-6">
       <header className="mx-auto flex max-w-2xl items-center justify-between">
@@ -85,26 +78,9 @@ export default async function SessionPage({ params, searchParams }: Props) {
             <dt className="text-sm font-medium text-slate-500">Domain</dt>
             <dd>{domainLabel}</dd>
           </div>
-          <div>
-            <dt className="text-sm font-medium text-slate-500">Session ID</dt>
-            <dd className="font-mono text-sm">{sessionId}</dd>
-          </div>
         </dl>
 
-        {exercise ? (
-          <SessionQuestion
-            exerciseId={exercise.id}
-            prompt={exercise.prompt}
-            sessionId={sessionId}
-            domainSlug={session.domain}
-          />
-        ) : (
-          <p className="mt-6 text-slate-600">No exercises for this domain yet.</p>
-        )}
-
-        <div className="mt-8">
-          <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
-        </div>
+        <SessionFlow sessionId={sessionId} learnerSlug={learnerSlug} learnerId={session.learner_id} />
       </div>
     </main>
   );

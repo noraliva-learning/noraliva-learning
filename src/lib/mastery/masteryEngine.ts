@@ -35,9 +35,9 @@ export function updateMasteryFromCounts(
 }
 
 /**
- * Schedule next review time using simple spaced repetition:
- * - Correct: push next review by 1–7 days (higher mastery = longer interval)
- * - Incorrect: next review in 10 minutes
+ * Schedule next review time using spaced repetition (Phase 2):
+ * - Correct: short-term 7–14 days (mastery building) or long-term 30–90 days (mastery high).
+ * - Incorrect: next review in 10 minutes.
  */
 export function scheduleNextReview(
   correct: boolean,
@@ -45,9 +45,16 @@ export function scheduleNextReview(
   now: Date = new Date()
 ): Date {
   if (correct) {
-    const days = masteryProbability >= 0.9 ? 7 : masteryProbability >= 0.7 ? 3 : 1;
     const next = new Date(now);
-    next.setDate(next.getDate() + days);
+    if (masteryProbability >= 0.85) {
+      // Long-term: 30–90 days
+      const days = 30 + (masteryProbability - 0.85) * (60 / 0.15);
+      next.setDate(next.getDate() + Math.round(Math.min(90, Math.max(30, days))));
+    } else {
+      // Short-term: 7–14 days
+      const days = 7 + (masteryProbability - 0.5) * (7 / 0.35);
+      next.setDate(next.getDate() + Math.round(Math.min(14, Math.max(7, days))));
+    }
     return next;
   }
   const next = new Date(now);
@@ -64,4 +71,29 @@ export function edgeOfLearningScore(masteryProbability: number, confidenceScore:
   const distFromMid = 1 - Math.abs(masteryProbability - 0.55) / 0.55; // peak at 0.55
   const lowConfBonus = Math.max(0, 1 - confidenceScore / 20); // prefer lower confidence when similar
   return 0.7 * Math.max(0, distFromMid) + 0.3 * lowConfBonus;
+}
+
+/** Minimum confidence for promotion (attempts enough to be sure). */
+export const PROMOTION_CONFIDENCE_MIN = 5;
+
+/** Promotion rule: mastery >= 0.85 AND confidence >= threshold AND at least 2 spaced checks passed. */
+export function isPromoted(params: {
+  mastery_probability: number;
+  confidence_score: number;
+  spaced_check_count: number;
+}): boolean {
+  return (
+    params.mastery_probability >= 0.85 &&
+    params.confidence_score >= PROMOTION_CONFIDENCE_MIN &&
+    params.spaced_check_count >= 2
+  );
+}
+
+/** Struggle rule: accuracy < 0.60 OR same misconception >= 3 times in recent window. */
+export function isStruggling(params: {
+  accuracy: number;
+  recentMisconceptionCounts: { tag: string; count: number }[];
+}): boolean {
+  if (params.accuracy < 0.6) return true;
+  return params.recentMisconceptionCounts.some((c) => c.count >= 3);
 }

@@ -88,6 +88,33 @@ export interface Misconception {
   created_at: string;
 }
 
+/** Per-attempt misconception tag (Phase 2). */
+export interface AttemptMisconception {
+  id: string;
+  attempt_id: string;
+  learner_id: string;
+  skill_id: string;
+  tag: string;
+  exercise_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+/** Session path choice for spiral planner. */
+export type SessionPath = "level_up" | "review";
+
+export interface LearningSession {
+  id: string;
+  learner_id: string;
+  domain: string;
+  status: "active" | "completed";
+  started_at: string;
+  ended_at: string | null;
+  path: SessionPath | null;
+  session_plan: string[] | null;
+  current_index: number;
+}
+
 export interface ReviewSchedule {
   id: string;
   learner_id: string;

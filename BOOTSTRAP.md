@@ -73,6 +73,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 2. **Ensure migrations are applied** so `profiles` and RLS exist:
 
    - Either run your Supabase migrations (e.g. `supabase db push` or apply `00001_schema.sql` and `00002_rls.sql` in the SQL Editor).
+   - For Phase 2 learn sessions (path, session_plan, current_index), also apply `00009_fix_phase2_schema.sql`. See **docs/phase2-debug.md** for verification SQL and why sessions were completing instantly.
 
 3. **Run the bootstrap** (reads from `.env.local` or `.env`):
 

@@ -28,9 +28,17 @@ export default function V2LoginPage() {
       setMessage({ type: "error", text: "Sign-in succeeded but no user returned." });
       return;
     }
-    const appRole = await getUserAppRole(supabase, user);
-    setMessage({ type: "ok", text: "Signed in. Redirecting…" });
-    window.location.href = getDashboardPath(appRole);
+    try {
+      const appRole = await getUserAppRole(supabase, user);
+      const path = getDashboardPath(appRole);
+      setMessage({ type: "ok", text: "Signed in. Redirecting…" });
+      window.location.href = path;
+    } catch (err) {
+      setLoading(false);
+      const text = err instanceof Error ? err.message : String(err);
+      console.error("[v2/login] getUserAppRole or redirect failed:", err);
+      setMessage({ type: "error", text: `Redirect failed: ${text}` });
+    }
   }
 
   return (

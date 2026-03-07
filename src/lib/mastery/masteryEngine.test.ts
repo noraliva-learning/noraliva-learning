@@ -3,6 +3,8 @@ import {
   updateMasteryFromCounts,
   scheduleNextReview,
   edgeOfLearningScore,
+  isPromoted,
+  isStruggling,
 } from './masteryEngine';
 
 describe('updateMasteryFromCounts', () => {
@@ -42,19 +44,22 @@ describe('scheduleNextReview', () => {
     expect(next.getTime() - base.getTime()).toBe(10 * 60 * 1000);
   });
 
-  it('schedules 1 day after correct when mastery < 0.7', () => {
+  it('schedules 7–14 days (short-term) after correct when mastery < 0.85', () => {
     const next = scheduleNextReview(true, 0.5, base);
-    expect(next.getDate()).toBe(2);
-    expect(next.getMonth()).toBe(base.getMonth());
+    const days = (next.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThanOrEqual(7);
+    expect(days).toBeLessThanOrEqual(14);
   });
 
-  it('schedules 3 days after correct when mastery in [0.7, 0.9)', () => {
-    const next = scheduleNextReview(true, 0.8, base);
-    expect(next.getDate()).toBe(4);
+  it('schedules 30–90 days (long-term) after correct when mastery >= 0.85', () => {
+    const next = scheduleNextReview(true, 0.9, base);
+    const days = (next.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThanOrEqual(30);
+    expect(days).toBeLessThanOrEqual(90);
   });
 
-  it('schedules 7 days after correct when mastery >= 0.9', () => {
-    const next = scheduleNextReview(true, 0.95, base);
+  it('schedules ~7 days at low mastery', () => {
+    const next = scheduleNextReview(true, 0.5, base);
     expect(next.getDate()).toBe(8);
   });
 });
@@ -75,5 +80,25 @@ describe('edgeOfLearningScore', () => {
 
   it('handles zero confidence', () => {
     expect(edgeOfLearningScore(0.5, 0)).toBe(0.5);
+  });
+});
+
+describe('isPromoted', () => {
+  it('requires mastery >= 0.85, confidence >= 5, spaced_check_count >= 2', () => {
+    expect(isPromoted({ mastery_probability: 0.9, confidence_score: 10, spaced_check_count: 2 })).toBe(true);
+    expect(isPromoted({ mastery_probability: 0.84, confidence_score: 10, spaced_check_count: 2 })).toBe(false);
+    expect(isPromoted({ mastery_probability: 0.9, confidence_score: 4, spaced_check_count: 2 })).toBe(false);
+    expect(isPromoted({ mastery_probability: 0.9, confidence_score: 10, spaced_check_count: 1 })).toBe(false);
+  });
+});
+
+describe('isStruggling', () => {
+  it('triggers when accuracy < 0.60', () => {
+    expect(isStruggling({ accuracy: 0.5, recentMisconceptionCounts: [] })).toBe(true);
+    expect(isStruggling({ accuracy: 0.6, recentMisconceptionCounts: [] })).toBe(false);
+  });
+  it('triggers when same misconception >= 3 in recent window', () => {
+    expect(isStruggling({ accuracy: 0.7, recentMisconceptionCounts: [{ tag: 'place_value', count: 3 }] })).toBe(true);
+    expect(isStruggling({ accuracy: 0.7, recentMisconceptionCounts: [{ tag: 'place_value', count: 2 }] })).toBe(false);
   });
 });

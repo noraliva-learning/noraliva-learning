@@ -2,9 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
 import path from 'path';
 
-// Ensure webServer gets env for prod server (e.g. NEXT_PUBLIC_* from .env.local)
+// Ensure webServer and test workers get env from .env.local (e.g. NEXT_PUBLIC_*, TEST_LEARNER_*)
 const envLocalPath = path.join(__dirname, '.env.local');
 const parsed = loadEnv({ path: envLocalPath }).parsed ?? {};
+if (Object.keys(parsed).length) Object.assign(process.env, parsed);
 const webServerEnv: NodeJS.ProcessEnv = { ...process.env, ...parsed };
 
 export default defineConfig({
