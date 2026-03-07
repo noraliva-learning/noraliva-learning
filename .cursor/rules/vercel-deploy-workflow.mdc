@@ -1,0 +1,82 @@
+---
+description: Vercel deploy workflow — when to push, verify, and how to confirm deployments
+alwaysApply: true
+---
+
+# Noraliva Vercel Deploy Workflow
+
+This rule defines **workflow behavior only**. Do not change app logic to satisfy this rule.
+
+## Push policy
+
+- **Do not push to any branch unless the user explicitly approves the change.**
+- After making code changes, summarize what changed and ask for approval before running the deploy steps below.
+
+## Branch strategy
+
+- **Small UI changes** (copy, styles, layout tweaks, no logic): push directly to `main`.
+- **Logic changes** (behavior, API, data flow, new features, refactors): use a **preview branch**:
+  1. Create branch: `preview/<feature-name>` (e.g. `preview/session-plan-api`).
+  2. Push to that branch so Vercel creates a **preview deployment**.
+  3. **Verify the preview** (user checks the preview URL) before merging to `main`.
+  4. Do not merge to `main` until the user confirms the preview is good.
+
+## Preview deployment workflow (for logic changes)
+
+1. Create branch: `preview/<feature-name>`.
+2. Commit and push → Vercel automatically deploys a preview (preview URL in dashboard or push output).
+3. Give the user the **preview URL** so they can verify.
+4. Only after they confirm the preview is good, merge to `main` (user or agent, per user preference).
+
+## After user approves a change
+
+1. **Run verification** (do not skip tests when tests are relevant):
+   - `npm run lint`
+   - `npm run typecheck`
+   - `npm run test` (and `npm run test:e2e` when E2E is relevant)
+   - `npm run build` (ensures production build succeeds)
+2. **If all checks pass:** create a **clean git commit** (meaningful message, no unrelated files).
+3. **Push** to the branch connected to Vercel:
+   - For production: push to `main` (or the branch configured as Production in Vercel).
+   - For preview: push to the chosen preview branch.
+4. **Confirm** the push succeeded (e.g. `git status`, or show push output).
+5. **Confirm** that Vercel started a new deployment (user can check Vercel dashboard or deployment hook output).
+6. **Give the user the deployment URL** (production URL for `main`, or the preview URL from Vercel for the branch).
+
+## Git commands used after approval
+
+```bash
+# From repo root, after verification passes:
+
+# 1. Stage only the intended changes
+git add <files>
+
+# 2. Commit with a clear message
+git commit -m "Brief description of change"
+
+# 3. Push to the target branch (main or preview branch)
+git push origin <branch-name>
+```
+
+Example for main:
+```bash
+git add path/to/changed/files
+git commit -m "fix: correct env example"
+git push origin main
+```
+
+Example for a preview branch (logic changes; verify preview before merging to main):
+```bash
+git checkout -b preview/<feature-name>
+git add path/to/changed/files
+git commit -m "feat: description"
+git push origin preview/<feature-name>
+# → Vercel deploys preview; user verifies at the preview URL before merge
+```
+
+## Vercel configuration (confirm in dashboard)
+
+- **Production branch:** Set in Vercel → Project → Settings → Git → Production Branch. Default is usually `main`; confirm which branch powers production.
+- **Preview deployments:** Enabled by default in Vercel for non-production branches and pull requests. Confirm in Project → Settings → Git if needed.
+
+When discussing deployments, remind the user to confirm production branch and preview settings in the Vercel dashboard if unsure.
