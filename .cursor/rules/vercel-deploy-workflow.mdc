@@ -12,6 +12,18 @@ This rule defines **workflow behavior only**. Do not change app logic to satisfy
 - **Do not push to any branch unless the user explicitly approves the change.**
 - After making code changes, summarize what changed and ask for approval before running the deploy steps below.
 
+## Deployment safety — never push directly to main
+
+If the change includes **any** of the following, **always use a preview branch first**; do not push to `main` until the preview is verified:
+
+- **Supabase migrations** (e.g. files under `supabase/migrations/`)
+- **Auth logic** (login, sign-in, roles, session/auth code)
+- **AI generation routes** (e.g. `/api/v2/ai/*` or other AI route handlers)
+- **Session engine logic** (session planning, attempt handling, flow control)
+- **Database schema changes** (tables, columns, RLS, types that reflect schema)
+
+These are high-impact; deploy to a preview, verify, then merge to `main`.
+
 ## Branch strategy
 
 - **Small UI changes** (copy, styles, layout tweaks, no logic): push directly to `main`.
