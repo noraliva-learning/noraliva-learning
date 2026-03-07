@@ -142,4 +142,38 @@ describe('selectNextExerciseWithMastery', () => {
     );
     expect(next).toEqual(exercises[0]);
   });
+
+  it('filters to eligible skills when eligibleSkillIds provided', () => {
+    const exercises = [
+      ex('e1', 'Q1', 0, 's1'),
+      ex('e2', 'Q2', 1, 's2'),
+      ex('e3', 'Q3', 2, 's3'),
+    ];
+    const eligibleSkillIds = new Set<string>(['s1', 's3']);
+    const next = selectNextExerciseWithMastery(
+      exercises,
+      [],
+      emptyMastery,
+      noDue,
+      null,
+      eligibleSkillIds
+    );
+    expect(next).not.toBeNull();
+    expect(['s1', 's3']).toContain(next!.skill_id);
+    expect(next!.skill_id).not.toBe('s2');
+  });
+
+  it('returns null when no exercises are in eligibleSkillIds', () => {
+    const exercises = [ex('e1', 'Q1', 0, 's1'), ex('e2', 'Q2', 1, 's2')];
+    const eligibleSkillIds = new Set<string>(['s3']);
+    const next = selectNextExerciseWithMastery(
+      exercises,
+      [],
+      emptyMastery,
+      noDue,
+      null,
+      eligibleSkillIds
+    );
+    expect(next).toBeNull();
+  });
 });

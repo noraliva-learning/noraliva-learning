@@ -35,6 +35,8 @@ export interface Unit {
   updated_at: string;
 }
 
+export type SkillDifficulty = 'easy' | 'medium' | 'hard';
+
 export interface Skill {
   id: string;
   domain_id: string;
@@ -42,8 +44,17 @@ export interface Skill {
   slug: string;
   name: string;
   sort_order: number;
+  difficulty?: SkillDifficulty | null;
   created_at: string;
   updated_at: string;
+}
+
+/** PASS 1: prerequisite edge; prerequisite is met when learner mastery_probability >= 0.85. */
+export interface SkillPrerequisite {
+  id: string;
+  skill_id: string;
+  prerequisite_skill_id: string;
+  created_at: string;
 }
 
 export interface Lesson {

@@ -3,10 +3,12 @@
  * Used by API route generate plan.
  * Exercises are joined via lessons: exercises.lesson_id = lessons.id, lessons.skill_id = skills.id
  * (schema uses lesson_id on exercises, not skill_id).
+ * PASS 1: Filters to prerequisite-eligible skills only; on prerequisite load failure, falls back to all skills.
  */
 
 import { createClient } from '@/lib/supabase/server';
 import type { ExerciseForPlan, MasteryForPlan } from '@/lib/session/sessionPlanner';
+import { getSkillsWithPrerequisitesMet } from '@/lib/curriculum/skillGraph';
 
 export type SessionPlanData = {
   exercises: ExerciseForPlan[];
@@ -59,7 +61,16 @@ export async function loadSessionPlanData(
         return domainSkillIds;
       })());
 
+  let eligibleSkillIds: Set<string>;
+  try {
+    eligibleSkillIds = await getSkillsWithPrerequisitesMet(supabase, learnerId, domainSkillIds);
+  } catch (err) {
+    console.warn('[loadSessionPlanData] Prerequisite evaluation failed, using all domain skills', err);
+    eligibleSkillIds = new Set(domainSkillIds);
+  }
+
   for (const skillId of domainSkillIds) {
+    if (!eligibleSkillIds.has(skillId)) continue;
     const { data: lessons } = await supabase
       .from('lessons')
       .select('id')
@@ -131,10 +142,12 @@ const FALLBACK_PLAN_LIMIT = 10;
 /**
  * Returns up to N exercise IDs for the domain (by sort_order) when the spiral planner
  * has no due reviews / edge content. Uses exercises.lesson_id via lessons.
+ * When learnerId is provided, filters to prerequisite-eligible skills only; on failure uses all skills.
  */
 export async function loadFallbackExerciseIds(
   domainSlug: string,
-  limit: number = FALLBACK_PLAN_LIMIT
+  limit: number = FALLBACK_PLAN_LIMIT,
+  learnerId?: string | null
 ): Promise<string[]> {
   const supabase = await createClient();
   const { data: domain } = await supabase
@@ -151,7 +164,7 @@ export async function loadFallbackExerciseIds(
     .eq('domain_id', domain.id)
     .order('sort_order', { ascending: true });
 
-  const skillIds: string[] = units?.length
+  let skillIds: string[] = units?.length
     ? (await (async () => {
         const out: string[] = [];
         for (const unit of units!) {
@@ -166,6 +179,15 @@ export async function loadFallbackExerciseIds(
       })())
     : (await supabase.from('skills').select('id').eq('domain_id', domain.id).order('sort_order', { ascending: true }))
         .data?.map((s) => s.id) ?? [];
+
+  if (learnerId && skillIds.length > 0) {
+    try {
+      const eligible = await getSkillsWithPrerequisitesMet(supabase, learnerId, skillIds);
+      skillIds = skillIds.filter((id) => eligible.has(id));
+    } catch (err) {
+      console.warn('[loadFallbackExerciseIds] Prerequisite evaluation failed, using all domain skills', err);
+    }
+  }
 
   for (const skillId of skillIds) {
     if (ids.length >= limit) break;

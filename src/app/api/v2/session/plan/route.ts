@@ -42,11 +42,11 @@ export async function POST(request: Request) {
         path,
       });
       if (exerciseIds.length === 0) {
-        exerciseIds = await loadFallbackExerciseIds(session.domain, 10);
+        exerciseIds = await loadFallbackExerciseIds(session.domain, 10, user.id);
         useFallback = true;
       }
     } else {
-      exerciseIds = await loadFallbackExerciseIds(session.domain, 10);
+      exerciseIds = await loadFallbackExerciseIds(session.domain, 10, user.id);
       useFallback = true;
     }
 
