@@ -6,6 +6,7 @@ import {
   selectNextExerciseWithMastery,
   type MasteryForSkill,
 } from '@/lib/curriculum/nextExerciseLogic';
+import { getSkillsWithPrerequisitesMet } from '@/lib/curriculum/skillGraph';
 
 export type NextExerciseResult = {
   id: string;
@@ -176,12 +177,20 @@ export async function getNextExercise(
     if (m.next_review_at && m.next_review_at <= now) dueReviewSkillIds.add(skillId);
   }
 
+  let eligibleSkillIds: Set<string> | null = null;
+  try {
+    eligibleSkillIds = await getSkillsWithPrerequisitesMet(supabase, learnerId, domainSkillIds);
+  } catch (err) {
+    console.warn('[getNextExercise] Prerequisite evaluation failed, using all domain skills', err);
+  }
+
   const next = selectNextExerciseWithMastery(
     exercises,
     (attempts ?? []).map((a) => ({ exercise_id: a.exercise_id })),
     masteryBySkill,
     dueReviewSkillIds,
-    lastExerciseId ?? null
+    lastExerciseId ?? null,
+    eligibleSkillIds ?? undefined
   );
 
   if (!next) return null;

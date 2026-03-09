@@ -47,19 +47,25 @@ export function selectNextExercise(
 /**
  * Next exercise with Noraliva Mastery Engine: prioritize due reviews, then edge-of-learning skills,
  * then curriculum order. Never returns the same exercise as lastExerciseId.
+ * When eligibleSkillIds is provided, only exercises whose skill_id is in the set are considered.
  */
 export function selectNextExerciseWithMastery(
   exercises: ExerciseForSelection[],
   correctAttempts: CorrectAttempt[],
   masteryBySkill: Map<string, MasteryForSkill>,
   dueReviewSkillIds: Set<string>,
-  lastExerciseId: string | null
+  lastExerciseId: string | null,
+  eligibleSkillIds?: Set<string> | null
 ): ExerciseForSelection | null {
-  if (exercises.length === 0) return null;
+  let candidates = exercises;
+  if (eligibleSkillIds != null && eligibleSkillIds.size > 0) {
+    candidates = exercises.filter((ex) => eligibleSkillIds.has(ex.skill_id));
+  }
+  if (candidates.length === 0) return null;
 
   const correctSet = new Set(correctAttempts.map((a) => a.exercise_id));
   const excludeId = lastExerciseId ?? '';
-  const candidates = excludeId ? exercises.filter((ex) => ex.id !== excludeId) : exercises;
+  candidates = excludeId ? candidates.filter((ex) => ex.id !== excludeId) : candidates;
   if (candidates.length === 0) return null;
 
   const now = new Date().toISOString();
