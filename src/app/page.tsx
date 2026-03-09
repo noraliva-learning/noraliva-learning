@@ -7,9 +7,8 @@ export default function HomePage() {
         <h1 className="text-3xl font-bold text-slate-900">
           Liv &amp; Elle Learning Arcade
         </h1>
-        <p className="mt-2 text-slate-600">
-          Phase 1 scaffold is live. Next: auth, profiles, mastery model,
-          misconceptions, spaced repetition, games, and the parent dashboard.
+        <p className="mt-2 text-lg text-slate-600">
+          Your place to practice math, reading, and more. Welcome, Liv and Elle!
         </p>
 
         <div className="mt-6">
@@ -20,13 +19,13 @@ export default function HomePage() {
             Sign in to Learning Arcade
           </Link>
           <p className="mt-2 text-sm text-slate-500">
-            Liv and Elle can sign in here to use the real adaptive engine.
+            Sign in to start practicing and see your progress.
           </p>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="text-sm font-semibold text-slate-900">Learners</div>
+            <div className="text-sm font-semibold text-slate-900">Quick start</div>
             <div className="mt-2 flex flex-wrap gap-3">
               <Link
                 href="/learners/liv"
@@ -47,12 +46,9 @@ export default function HomePage() {
           </div>
 
           <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="text-sm font-semibold text-slate-900">Domains</div>
+            <div className="text-sm font-semibold text-slate-900">What you can practice</div>
             <div className="mt-2 text-sm text-slate-700">
               Math • Reading • Writing • Architecture • Spanish
-            </div>
-            <div className="mt-3 text-xs text-slate-600">
-              (We’ll make these clickable after learner selection.)
             </div>
           </div>
         </div>

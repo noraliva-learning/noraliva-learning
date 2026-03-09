@@ -84,7 +84,7 @@ export default function V2LearnerDashboardPage() {
   return (
     <main className="min-h-screen p-6">
       <header className="mx-auto flex max-w-4xl items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Learner Dashboard ({name})</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Hi, {name}!</h1>
         <button
           onClick={handleSignOut}
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
@@ -94,7 +94,7 @@ export default function V2LearnerDashboardPage() {
       </header>
 
       <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-slate-600">Choose a domain to practice.</p>
+        <p className="text-slate-600">Choose what you want to practice today.</p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {DOMAINS.map((d) => (
             <button
@@ -102,11 +102,11 @@ export default function V2LearnerDashboardPage() {
               type="button"
               onClick={() => handleStartSession(d.id)}
               disabled={startingDomain !== null}
-              className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow disabled:opacity-60"
+              className="rounded-xl border-2 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md hover:bg-emerald-50/50 disabled:opacity-60"
             >
               <div className="font-semibold text-slate-900">{d.label}</div>
               <div className="mt-1 text-sm text-slate-600">
-                {startingDomain === d.id ? "Starting…" : "Start a session"}
+                {startingDomain === d.id ? "Starting…" : "Tap to start →"}
               </div>
             </button>
           ))}
@@ -118,13 +118,13 @@ export default function V2LearnerDashboardPage() {
             disabled={startingDomain !== null}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {startingDomain === "math" ? "Starting…" : "Go to Learn session"}
+            {startingDomain === "math" ? "Starting…" : "Quick start: Math"}
           </button>
           <Link
             href="/"
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Back to prototype home
+            Back to home
           </Link>
         </div>
       </div>

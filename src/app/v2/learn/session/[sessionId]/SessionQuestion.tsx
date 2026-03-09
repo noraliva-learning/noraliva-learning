@@ -38,7 +38,7 @@ export function SessionQuestion({
   async function handleSubmit() {
     const trimmed = answer.trim();
     if (!trimmed) {
-      setError('Please enter an answer.');
+      setError('Type something and try again!');
       return;
     }
     if (!exerciseId) {
@@ -78,9 +78,9 @@ export function SessionQuestion({
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+    <div className="mt-6 rounded-xl border-2 border-slate-200 bg-white p-4">
       <p className="font-medium text-slate-900">{prompt}</p>
-      <p className="mt-2 text-sm text-slate-600">Your answer:</p>
+      <p className="mt-2 text-sm text-slate-600">Your turn! Type your answer below.</p>
       <div className="mt-3 flex flex-col gap-3">
         {answerType === 'multiple_choice' ? (
           <input
@@ -108,7 +108,7 @@ export function SessionQuestion({
           disabled={loading}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {loading ? 'Checking…' : 'Submit'}
+          {loading ? 'Checking your answer…' : 'Check my answer'}
         </button>
       </div>
       {hints.length > 0 && (

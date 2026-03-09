@@ -91,7 +91,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
   if (status === 'loading') {
     return (
       <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
-        <p className="text-slate-600">Loading…</p>
+        <p className="text-slate-600">Getting your question ready…</p>
       </div>
     );
   }
@@ -100,9 +100,9 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
     return (
       <div className="mt-6 space-y-6">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <p className="text-lg font-semibold text-amber-900">No content yet</p>
+          <p className="text-lg font-semibold text-amber-900">Nothing to practice just yet</p>
           <p className="mt-2 text-slate-700">
-            We couldn&apos;t generate an exercise for this domain right now. Try again or pick another domain.
+            We couldn&apos;t find a question for this topic right now. Try another subject or come back soon!
           </p>
         </div>
         <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
@@ -113,12 +113,13 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
   if (status === 'celebration') {
     return (
       <div className="mt-6 space-y-6">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-          <p className="text-lg font-semibold text-emerald-900">Session complete!</p>
+        <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6 text-center">
+          <p className="text-2xl font-bold text-emerald-900">You did it! 🌟</p>
+          <p className="mt-2 text-lg font-medium text-emerald-800">Session complete!</p>
           <p className="mt-2 text-slate-700">
             {feedback?.dueReviewsCount != null && feedback.dueReviewsCount > 0
-              ? `${feedback.dueReviewsCount} skill(s) to review next time.`
-              : 'Great work. Come back for more soon!'}
+              ? `You have ${feedback.dueReviewsCount} skill(s) to review next time.`
+              : 'Awesome work today. Come back anytime for more!'}
           </p>
         </div>
         <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
@@ -128,14 +129,14 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
 
   if (status === 'feedback' && feedback) {
     return (
-      <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="font-medium text-slate-900">
-          {feedback.correct ? 'Correct!' : 'Not quite.'}
+      <div className="mt-6 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+        <p className="text-lg font-semibold text-slate-900">
+          {feedback.correct ? 'Nice job! ✓' : 'Good try! Keep going.'}
         </p>
         {feedback.encouragementMessage && (
           <p className="mt-1 text-slate-700">{feedback.encouragementMessage}</p>
         )}
-        <p className="mt-1 text-sm text-slate-600">Mastery level for this skill: {feedback.masteryLevel}</p>
+        <p className="mt-1 text-sm text-slate-600">You&apos;re at level {feedback.masteryLevel} on this skill.</p>
         {feedback.microLesson && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <p className="font-medium">Quick tip</p>
@@ -144,9 +145,9 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         )}
         <button
           onClick={handleAdvance}
-          className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
         >
-          Next question
+          Next question →
         </button>
       </div>
     );
@@ -158,6 +159,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         <p className="mt-2 text-sm text-slate-500">
           Question {exercise.index + 1}
         </p>
+        <p className="mt-1 text-sm text-slate-600">Give it a try!</p>
         {exercise.exerciseId ? (
           <SessionQuestion
             sessionId={sessionId}
@@ -171,7 +173,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         ) : (
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-amber-900">
-              This question couldn&apos;t be saved. Skipping to the next one.
+              This one had a hiccup. Let&apos;s try the next question!
               {(exercise.debugReason || exercise.debugMessage) && (
                 <span data-testid="generate-exercise-debug">
                   {' '}[{exercise.debugReason ?? ''}
@@ -183,9 +185,9 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
             <button
               type="button"
               onClick={fetchNext}
-              className="mt-3 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
             >
-              Next question
+              Next question →
             </button>
           </div>
         )}
@@ -198,7 +200,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
 
   return (
     <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
-      <p className="text-slate-600">No exercises in this session.</p>
+      <p className="text-slate-600">No questions in this session. Head back and pick another topic!</p>
       <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
     </div>
   );

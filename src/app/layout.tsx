@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "Liv & Elle Learning Arcade",
-  description: "Elite adaptive learning platform (Phase 1 scaffold).",
+  description: "Practice math, reading, and more — made for Liv & Elle.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

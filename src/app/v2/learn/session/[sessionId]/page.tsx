@@ -59,26 +59,17 @@ export default async function SessionPage({ params }: Props) {
   return (
     <main className="min-h-screen p-6">
       <header className="mx-auto flex max-w-2xl items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Learning Session</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{domainLabel} practice</h1>
         <Link
           href={`/v2/learners/${learnerSlug}`}
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
         >
-          ← Back to Dashboard
+          ← Back to my arcade
         </Link>
       </header>
 
       <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <dl className="space-y-2 text-slate-700">
-          <div>
-            <dt className="text-sm font-medium text-slate-500">Learner</dt>
-            <dd>{learnerName}</dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-slate-500">Domain</dt>
-            <dd>{domainLabel}</dd>
-          </div>
-        </dl>
+        <p className="text-slate-600">Hey {learnerName}, you&apos;re practicing <strong>{domainLabel}</strong>.</p>
 
         <SessionFlow sessionId={sessionId} learnerSlug={learnerSlug} learnerId={session.learner_id} />
       </div>
