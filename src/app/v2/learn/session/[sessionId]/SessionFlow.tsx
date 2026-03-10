@@ -1,5 +1,7 @@
 'use client';
 
+import { motion } from 'framer-motion';
+import { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EndSessionButton } from './SessionActions';
 import { SessionQuestion } from './SessionQuestion';
@@ -8,6 +10,7 @@ type Props = {
   sessionId: string;
   learnerSlug: string;
   learnerId: string;
+  learnerName: string;
 };
 
 type Exercise = {
@@ -31,11 +34,14 @@ type Feedback = {
   encouragementMessage?: string;
 };
 
-export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
+export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: Props) {
   const [exercise, setExercise] = useState<Exercise>(null);
   const [status, setStatus] = useState<'loading' | 'question' | 'feedback' | 'celebration' | 'empty'>('loading');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const questionsSeenRef = useRef(0);
+  const [completedCount, setCompletedCount] = useState(0);
+
+  const missionTarget = 8;
 
   const fetchNext = useCallback(async () => {
     setStatus('loading');
@@ -75,6 +81,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
 
   function handleResult(f: Feedback) {
     setFeedback(f);
+    setCompletedCount((count) => count + 1);
     setStatus('feedback');
   }
 
@@ -88,17 +95,17 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
     fetchNext();
   }
 
+  let body: ReactNode = null;
+
   if (status === 'loading') {
-    return (
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+    body = (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
         <p className="text-slate-600">Getting your question ready…</p>
       </div>
     );
-  }
-
-  if (status === 'empty') {
-    return (
-      <div className="mt-6 space-y-6">
+  } else if (status === 'empty') {
+    body = (
+      <div className="mt-4 space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
           <p className="text-lg font-semibold text-amber-900">Nothing to practice just yet</p>
           <p className="mt-2 text-slate-700">
@@ -108,30 +115,88 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
       </div>
     );
-  }
+  } else if (status === 'celebration') {
+    body = (
+      <div className="mt-4 space-y-4">
+        <motion.div
+          className="relative overflow-hidden rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-6 text-center"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.4, type: 'spring', stiffness: 120 }}
+        >
+          <p className="text-3xl font-extrabold text-emerald-900">🎉 Mission Complete!</p>
+          <p className="mt-2 text-xl font-semibold text-emerald-800">+25 XP</p>
+          <p className="mt-2 text-base text-slate-800">Your brain just got stronger!</p>
 
-  if (status === 'celebration') {
-    return (
-      <div className="mt-6 space-y-6">
-        <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6 text-center">
-          <p className="text-2xl font-bold text-emerald-900">You did it! 🌟</p>
-          <p className="mt-2 text-lg font-medium text-emerald-800">Session complete!</p>
-          <p className="mt-2 text-slate-700">
-            {feedback?.dueReviewsCount != null && feedback.dueReviewsCount > 0
-              ? `You have ${feedback.dueReviewsCount} skill(s) to review next time.`
-              : 'Awesome work today. Come back anytime for more!'}
-          </p>
-        </div>
+          <div className="pointer-events-none absolute inset-0">
+            <motion.span
+              className="absolute -left-4 top-3 text-2xl"
+              initial={{ y: 16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1, rotate: -10 }}
+              transition={{ delay: 0.1, duration: 0.4 }}
+            >
+              ✨
+            </motion.span>
+            <motion.span
+              className="absolute right-4 top-6 text-xl"
+              initial={{ y: 16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1, rotate: 10 }}
+              transition={{ delay: 0.2, duration: 0.4 }}
+            >
+              🌟
+            </motion.span>
+            <motion.span
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 text-2xl"
+              initial={{ y: 16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
+            >
+              🎊
+            </motion.span>
+          </div>
+        </motion.div>
         <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
       </div>
     );
-  }
+  } else if (status === 'feedback' && feedback) {
+    body = (
+      <div className="mt-4 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+        {feedback.correct && (
+          <motion.div
+            className="mb-4 overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-emerald-100 p-4"
+            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.35, type: 'spring', stiffness: 140 }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-semibold text-emerald-900">
+                  Nice job {learnerName}! ✨
+                </p>
+                <p className="text-sm font-medium text-emerald-800">+10 XP</p>
+              </div>
+              <div className="relative h-10 w-10">
+                <motion.span
+                  className="absolute inset-0 rounded-full bg-emerald-400/30"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1.2, opacity: 0 }}
+                  transition={{ duration: 0.8, repeat: Infinity, repeatDelay: 0.6 }}
+                />
+                <motion.span
+                  className="absolute inset-1 flex items-center justify-center rounded-full bg-emerald-500 text-lg"
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  ✨
+                </motion.span>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
-  if (status === 'feedback' && feedback) {
-    return (
-      <div className="mt-6 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
         <p className="text-lg font-semibold text-slate-900">
-          {feedback.correct ? 'Nice job! ✓' : 'Good try! Keep going.'}
+          {feedback.correct ? 'You got it right!' : 'Good try! Keep going.'}
         </p>
         {feedback.encouragementMessage && (
           <p className="mt-1 text-slate-700">{feedback.encouragementMessage}</p>
@@ -151,15 +216,13 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         </button>
       </div>
     );
-  }
-
-  if (exercise && (exercise.exerciseId || exercise.prompt)) {
-    return (
+  } else if (exercise && (exercise.exerciseId || exercise.prompt)) {
+    body = (
       <>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-4 text-sm text-slate-500">
           Question {exercise.index + 1}
         </p>
-        <p className="mt-1 text-sm text-slate-600">Give it a try!</p>
+        <p className="mt-1 text-sm font-semibold text-slate-700">🧠 Brain Warm-Up!</p>
         {exercise.exerciseId ? (
           <SessionQuestion
             sessionId={sessionId}
@@ -196,12 +259,43 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId }: Props) {
         </div>
       </>
     );
+  } else {
+    body = (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-slate-600">No questions in this session. Head back and pick another topic!</p>
+        <div className="mt-4">
+          <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
+        </div>
+      </div>
+    );
   }
 
+  const safeCompleted = Math.min(completedCount, missionTarget);
+  const progressPercent = Math.max(0, Math.min(100, (safeCompleted / missionTarget) * 100));
+
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
-      <p className="text-slate-600">No questions in this session. Head back and pick another topic!</p>
-      <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
+    <div className="mt-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Mission Progress
+          </p>
+          <div className="mt-1 h-2 rounded-full bg-slate-100">
+            <div
+              className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300 transition-[width] duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="mt-1 text-xs text-slate-600">
+            {safeCompleted} / {missionTarget} questions complete
+          </p>
+        </div>
+        <div className="shrink-0 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
+          🔥 1 Day Streak
+        </div>
+      </div>
+
+      {body}
     </div>
   );
 }
