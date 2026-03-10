@@ -54,7 +54,8 @@ export default async function SessionPage({ params }: Props) {
 
   const learnerName = profile?.display_name || (profile?.role === 'liv' ? 'Liv' : profile?.role === 'elle' ? 'Elle' : 'Learner');
   const learnerSlug = profile?.role === 'liv' || profile?.role === 'elle' ? profile.role : 'liv';
-  const domainLabel = session.domain.charAt(0).toUpperCase() + session.domain.slice(1);
+  const domainSlug = session.domain;
+  const domainLabel = domainSlug.charAt(0).toUpperCase() + domainSlug.slice(1);
 
   return (
     <main className="min-h-screen p-6">
@@ -76,6 +77,7 @@ export default async function SessionPage({ params }: Props) {
           learnerSlug={learnerSlug}
           learnerId={session.learner_id}
           learnerName={learnerName}
+          domain={domainSlug}
         />
       </div>
     </main>

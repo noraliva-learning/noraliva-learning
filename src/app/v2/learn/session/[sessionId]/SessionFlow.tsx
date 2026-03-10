@@ -5,12 +5,14 @@ import { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EndSessionButton } from './SessionActions';
 import { SessionQuestion } from './SessionQuestion';
+import { AceChatPanel } from './AceChatPanel';
 
 type Props = {
   sessionId: string;
   learnerSlug: string;
   learnerId: string;
   learnerName: string;
+  domain: string;
 };
 
 type Exercise = {
@@ -34,7 +36,7 @@ type Feedback = {
   encouragementMessage?: string;
 };
 
-export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: Props) {
+export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, domain }: Props) {
   const [exercise, setExercise] = useState<Exercise>(null);
   const [prefetchedExercise, setPrefetchedExercise] = useState<Exercise>(null);
   const [isPrefetching, setIsPrefetching] = useState(false);
@@ -42,6 +44,10 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const questionsSeenRef = useRef(0);
   const [completedCount, setCompletedCount] = useState(0);
+  const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
+
+  const helperName =
+    learnerSlug === 'liv' ? 'Dan' : learnerSlug === 'elle' ? 'Lila' : 'Ace';
 
   const missionTarget = 8;
 
@@ -111,6 +117,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
 
   function handleResult(f: Feedback) {
     setFeedback(f);
+    setLatestAnswer(null);
     setCompletedCount((count) => count + 1);
     if (f.nextStep === 'next') {
       prefetchNext();
@@ -283,6 +290,8 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
             answerType={exercise.answer_type}
             hints={exercise.hints}
             onResult={handleResult}
+            onAnswerChange={setLatestAnswer}
+            onAnswerSubmitted={setLatestAnswer}
           />
         ) : (
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -325,28 +334,42 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
   const progressPercent = Math.max(0, Math.min(100, (safeCompleted / missionTarget) * 100));
 
   return (
-    <div className="mt-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Mission Progress
-          </p>
-          <div className="mt-1 h-2 rounded-full bg-slate-100">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300 transition-[width] duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
+    <div className="mt-6 lg:flex lg:items-start lg:gap-4">
+      <div className="flex-1">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Mission Progress
+            </p>
+            <div className="mt-1 h-2 rounded-full bg-slate-100">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300 transition-[width] duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              {safeCompleted} / {missionTarget} questions complete
+            </p>
           </div>
-          <p className="mt-1 text-xs text-slate-600">
-            {safeCompleted} / {missionTarget} questions complete
-          </p>
+          <div className="shrink-0 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
+            🔥 1 Day Streak
+          </div>
         </div>
-        <div className="shrink-0 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
-          🔥 1 Day Streak
-        </div>
-      </div>
 
-      {body}
+        {body}
+      </div>
+      <div className="lg:mt-0 lg:shrink-0">
+        <AceChatPanel
+          sessionId={sessionId}
+          learnerName={learnerName}
+          helperName={helperName}
+          domain={domain}
+          exerciseId={exercise?.exerciseId ?? null}
+          skillId={exercise?.skillId ?? null}
+          prompt={exercise?.prompt ?? null}
+          learnerAnswer={latestAnswer}
+        />
+      </div>
     </div>
   );
 }

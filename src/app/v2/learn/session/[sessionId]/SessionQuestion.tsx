@@ -19,6 +19,8 @@ type Props = {
   answerType: 'number' | 'short_answer' | 'multiple_choice';
   hints: string[];
   onResult: (f: Feedback) => void;
+  onAnswerChange?: (value: string) => void;
+  onAnswerSubmitted?: (value: string) => void;
 };
 
 export function SessionQuestion({
@@ -29,6 +31,8 @@ export function SessionQuestion({
   answerType,
   hints,
   onResult,
+  onAnswerChange,
+  onAnswerSubmitted,
 }: Props) {
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,6 +74,7 @@ export function SessionQuestion({
         dueReviewsCount: data.dueReviewsCount,
         encouragementMessage: data.encouragementMessage,
       });
+      onAnswerSubmitted?.(trimmed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Submit failed');
     } finally {
@@ -88,7 +93,11 @@ export function SessionQuestion({
           <input
             type="text"
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAnswer(value);
+              onAnswerChange?.(value);
+            }}
             placeholder="Type your choice"
             className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
             disabled={loading}
@@ -98,7 +107,11 @@ export function SessionQuestion({
             type={answerType === 'number' ? 'text' : 'text'}
             inputMode={answerType === 'number' ? 'numeric' : 'text'}
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAnswer(value);
+              onAnswerChange?.(value);
+            }}
             placeholder={answerType === 'number' ? 'Enter a number' : 'Type your answer'}
             className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
             disabled={loading}
