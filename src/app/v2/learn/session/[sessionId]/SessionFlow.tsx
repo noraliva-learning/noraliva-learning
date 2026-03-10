@@ -36,6 +36,8 @@ type Feedback = {
 
 export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: Props) {
   const [exercise, setExercise] = useState<Exercise>(null);
+  const [prefetchedExercise, setPrefetchedExercise] = useState<Exercise>(null);
+  const [isPrefetching, setIsPrefetching] = useState(false);
   const [status, setStatus] = useState<'loading' | 'question' | 'feedback' | 'celebration' | 'empty'>('loading');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const questionsSeenRef = useRef(0);
@@ -43,8 +45,21 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
 
   const missionTarget = 8;
 
+  const buildExercise = (data: any, index: number): Exercise => ({
+    exerciseId: data.exerciseId ?? null,
+    skillId: data.skillId ?? null,
+    prompt: data.prompt,
+    answer_type: data.answer_type ?? 'short_answer',
+    hints: Array.isArray(data.hints) ? data.hints : [],
+    index,
+    debugReason: data.debugReason ?? null,
+    debugMessage: data.debugMessage ?? null,
+    debugCode: data.debugCode ?? null,
+  });
+
   const fetchNext = useCallback(async () => {
     setStatus('loading');
+    setFeedback(null);
     try {
       const res = await fetch('/api/v2/ai/generate-exercise', {
         method: 'POST',
@@ -56,24 +71,39 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
         return;
       }
       const data = await res.json();
-      questionsSeenRef.current += 1;
-      setExercise({
-        exerciseId: data.exerciseId ?? null,
-        skillId: data.skillId ?? null,
-        prompt: data.prompt,
-        answer_type: data.answer_type ?? 'short_answer',
-        hints: Array.isArray(data.hints) ? data.hints : [],
-        index: questionsSeenRef.current - 1,
-        debugReason: data.debugReason ?? null,
-        debugMessage: data.debugMessage ?? null,
-        debugCode: data.debugCode ?? null,
-      });
+      const nextIndex = questionsSeenRef.current;
+      const nextExercise = buildExercise(data, nextIndex);
+      questionsSeenRef.current = nextIndex + 1;
+      setExercise(nextExercise);
+      setPrefetchedExercise(null);
       setStatus('question');
-      setFeedback(null);
     } catch {
       setStatus(questionsSeenRef.current > 0 ? 'celebration' : 'empty');
     }
   }, [sessionId]);
+
+  const prefetchNext = useCallback(async () => {
+    if (isPrefetching || prefetchedExercise) return;
+    setIsPrefetching(true);
+    try {
+      const res = await fetch('/api/v2/ai/generate-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (!res.ok) {
+        return;
+      }
+      const data = await res.json();
+      const nextIndex = questionsSeenRef.current;
+      const nextExercise = buildExercise(data, nextIndex);
+      setPrefetchedExercise(nextExercise);
+    } catch {
+      // Background fetch failures should not break the current flow.
+    } finally {
+      setIsPrefetching(false);
+    }
+  }, [isPrefetching, prefetchedExercise, sessionId]);
 
   useEffect(() => {
     fetchNext();
@@ -82,6 +112,9 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
   function handleResult(f: Feedback) {
     setFeedback(f);
     setCompletedCount((count) => count + 1);
+    if (f.nextStep === 'next') {
+      prefetchNext();
+    }
     setStatus('feedback');
   }
 
@@ -92,15 +125,33 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName }: 
       setExercise(null);
       return;
     }
-    fetchNext();
+    if (prefetchedExercise) {
+      setExercise(prefetchedExercise);
+      questionsSeenRef.current = prefetchedExercise.index + 1;
+      setPrefetchedExercise(null);
+      setStatus('question');
+      setFeedback(null);
+    } else {
+      fetchNext();
+    }
   }
 
   let body: ReactNode = null;
 
   if (status === 'loading') {
+    const isFirstQuestion = questionsSeenRef.current === 0;
     body = (
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-slate-600">Getting your question ready…</p>
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-4">
+        <p className="text-sm font-semibold text-slate-800">
+          {isFirstQuestion ? 'We are picking your first challenge…' : 'We are finding your next challenge…'}
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          Just a moment while we craft a question that&apos;s just right for your brain.
+        </p>
+        <div className="mt-3 flex items-center gap-2 text-xs text-sky-700">
+          <span className="inline-flex h-2 w-2 animate-ping rounded-full bg-sky-500" />
+          <span>Brain gears turning…</span>
+        </div>
       </div>
     );
   } else if (status === 'empty') {
