@@ -80,7 +80,9 @@ export function SessionQuestion({
   return (
     <div className="mt-6 rounded-xl border-2 border-slate-200 bg-white p-4">
       <p className="font-medium text-slate-900">{prompt}</p>
-      <p className="mt-2 text-sm text-slate-600">Your turn! Type your answer below.</p>
+      <p className="mt-2 text-sm text-slate-600">
+        Your turn! Type your answer below and we&apos;ll check it together.
+      </p>
       <div className="mt-3 flex flex-col gap-3">
         {answerType === 'multiple_choice' ? (
           <input
@@ -111,6 +113,12 @@ export function SessionQuestion({
           {loading ? 'Checking your answer…' : 'Check my answer'}
         </button>
       </div>
+      {loading && (
+        <div className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          <p>We&apos;re comparing your answer with the goal.</p>
+          <p className="mt-0.5">This usually takes just a moment.</p>
+        </div>
+      )}
       {hints.length > 0 && (
         <div className="mt-3">
           <button
