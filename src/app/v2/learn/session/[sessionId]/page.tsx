@@ -71,7 +71,12 @@ export default async function SessionPage({ params }: Props) {
       <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-slate-600">Hey {learnerName}, you&apos;re practicing <strong>{domainLabel}</strong>.</p>
 
-        <SessionFlow sessionId={sessionId} learnerSlug={learnerSlug} learnerId={session.learner_id} />
+        <SessionFlow
+          sessionId={sessionId}
+          learnerSlug={learnerSlug}
+          learnerId={session.learner_id}
+          learnerName={learnerName}
+        />
       </div>
     </main>
   );
