@@ -6,9 +6,7 @@ import { getLearnerContextForGeneration } from '@/lib/ai/getLearnerContextForAI'
 const MAX_TOKENS = 512;
 const TEMPERATURE = 0.5;
 
-const SYSTEM_PROMPT = `You are a kind, patient robot tutor helping a child (around ages 8-12) with their schoolwork.
-
-Safety and style rules:
+const BASE_RULES = `Safety and style rules:
 - Use kid-friendly language (simple, clear, encouraging).
 - Do NOT ask personal questions (no questions about family, friends, feelings, address, online accounts, or anything outside the lesson).
 - Stay focused only on the lesson content (the domain and skill provided).
@@ -34,6 +32,7 @@ type AceHelpPayload = {
   skillId?: string;
   question: string;
   helperName?: string;
+  learnerName?: string;
 };
 
 type AceHelpResponse = {
@@ -124,7 +123,8 @@ export async function POST(request: Request) {
     const clientPrompt = typeof body.prompt === 'string' ? body.prompt : undefined;
     const clientDomain = typeof body.domain === 'string' ? body.domain : undefined;
     const preferredSkillId = typeof body.skillId === 'string' ? body.skillId : undefined;
-  const helperNameFromClient = typeof body.helperName === 'string' ? body.helperName : undefined;
+    const helperNameFromClient = typeof body.helperName === 'string' ? body.helperName : undefined;
+    const learnerNameFromClient = typeof body.learnerName === 'string' ? body.learnerName : undefined;
 
     if (
       !sessionId ||
@@ -209,12 +209,15 @@ export async function POST(request: Request) {
     }
 
     const openai = new OpenAI({ apiKey });
+
+    const resolvedHelperName = helperNameFromClient || 'Ace';
+    const resolvedLearnerName = learnerNameFromClient || 'the learner';
+    const systemPrompt = `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerName} learn.
+
+${BASE_RULES}`;
     const userMessage = [
       effectiveDomain ? `Domain: ${effectiveDomain}.` : null,
       skillName ? `Skill: ${skillName}.` : null,
-      helperNameFromClient
-        ? `Your name in this conversation is "${helperNameFromClient}". When you talk about yourself, say "${helperNameFromClient}" instead of "Ace" or "tutor".`
-        : null,
       `Session question/prompt: ${prompt.slice(0, 500) || '(unknown prompt)'}.`,
       `Correct answer (do not reveal directly; only use to guide hints and explanations): ${String(
         correctAnswer
@@ -232,7 +235,7 @@ export async function POST(request: Request) {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
       max_tokens: MAX_TOKENS,

@@ -38,18 +38,42 @@ export function AceChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [lastAceText, setLastAceText] = useState<string | null>(null);
+  const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
 
   const hasExerciseContext = useMemo(() => !!exerciseId && !!prompt, [exerciseId, prompt]);
 
   useEffect(() => {
-    if (!isOpen || messages.length > 0) return;
-    const welcome: ChatMessage = {
-      id: 'welcome',
+    if (hasAutoGreeted) return;
+    const isDan = helperName === 'Dan';
+    const isLila = helperName === 'Lila';
+    let text: string;
+    if (isDan) {
+      text = "Hi Liv! I'm Dan. If you ever get stuck, you can ask me.";
+    } else if (isLila) {
+      text = "Hi Elle! I'm Lila. You can talk to me if you want help.";
+    } else {
+      text = `Hi ${learnerName}! I'm ${helperName}. If you ever get stuck, you can ask me.`;
+    }
+
+    const greeting: ChatMessage = {
+      id: 'auto-greeting',
       from: 'ace',
-      text: `Hi ${learnerName}! I’m ${helperName}. If you get stuck or want a hint about this question, you can ask me here.`,
+      text,
     };
-    setMessages([welcome]);
-  }, [isOpen, learnerName, helperName, messages.length]);
+
+    setIsOpen(true);
+    setMessages([greeting]);
+    setHasAutoGreeted(true);
+
+    if (typeof window !== 'undefined') {
+      const timer = window.setTimeout(() => {
+        setIsOpen(false);
+      }, 4000);
+      return () => window.clearTimeout(timer);
+    }
+
+    return;
+  }, [helperName, learnerName, hasAutoGreeted]);
 
   function speak(text: string) {
     if (typeof window === 'undefined') return;
@@ -102,6 +126,7 @@ export function AceChatPanel({
           skillId,
           question: trimmed,
           helperName,
+          learnerName,
         }),
       });
       if (!res.ok) {
@@ -239,14 +264,15 @@ export function AceChatPanel({
             <button
               type="button"
               onClick={handleMicClick}
-              className={`flex h-10 w-10 items-center justify-center rounded-full text-lg shadow-sm ${
+              className={`flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold shadow-sm ${
                 listening
                   ? 'bg-rose-500 text-white animate-pulse'
                   : 'bg-sky-600 text-white hover:bg-sky-700'
               }`}
-              aria-label="Ask with your voice"
+              aria-label={`Ask ${helperName} with your voice`}
             >
-              🎤
+              <span className="mr-1 text-sm">🎤</span>
+              <span>Ask {helperName}</span>
             </button>
             <div className="flex-1">
               <AceInput value={input} onChange={setInput} onSend={handleSend} disabled={loading} />
