@@ -3,39 +3,40 @@ import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { getLearnerContextForGeneration } from '@/lib/ai/getLearnerContextForAI';
 import { insertTutorTranscriptRow } from '@/lib/db/tutorTranscript';
+import { classifyIntent, type Intent } from '@/lib/ace/intentRouter';
 
 const LOG_PREFIX = '[ace/help]';
 
 const MAX_TOKENS = 512;
 const TEMPERATURE = 0.5;
 
-/** ACE core: one conversational tutor prompt. Social-first, intent-aware, child-safe. */
-const ACE_CORE_PROMPT = `You are a warm, conversational tutor. Respond to what the learner means first—then help with the lesson only when it fits.
+/** ACE-direct: learner talks to the model; Dan/Lila are personality wrappers only. */
+const ACE_CORE_PROMPT = `You are a warm conversational tutor. Reply in JSON only, no markdown.
+
+Response modes (use exactly one):
+- "social": greeting, thanks, intro, off-topic. One short warm reply. hints: [], example: "".
+- "guide": learner is confused, or asked "what next?", or asked for help. Give ONE next step or ONE guiding question only. Do not restart the lesson. hints: [] unless you add exactly one; example: "" unless needed.
+- "explain": learner asked a content/lesson question. Short explanation; optional hints/example.
 
 Rules:
-- Use kid-friendly language. Do NOT ask personal questions (no family, friends, address, school, location).
-- If they say hello, thank you, or introduce themselves (e.g. "my name is Elle"), reply with a short, warm social response. No lesson block.
-- If they're confused or want help, give a simpler explanation or one or two hints. Build on the conversation; don't repeat yourself.
-- If they ask a follow-up ("what next?", "and then?"), continue from where you left off. Do not restart the full explanation.
-- If they go off-topic (e.g. "how old are you?"), give a brief, playful redirect to the question. No lesson block.
-- Stay warm. Never mention you are an AI.
+- Kid-safe. No personal questions (family, school, location).
+- Stay warm. Never say you are an AI.
+- Only add hints or example when mode is "explain" and they help.
 
-Return JSON only, no markdown. Use "message" as the main reply. Only add hints/example when you're actually giving lesson help.
+JSON shape:
 {
-  "message": "your main reply—conversational and direct",
-  "mode": "social | greeting | hint | explanation | encouragement | redirect | follow_up",
+  "message": "your reply",
+  "mode": "social | guide | explain",
   "hints": [],
   "example": "",
   "shouldSpeak": true
-}
-- For social, greeting, redirect, follow_up: put everything in "message"; use hints: [] and example: "".
-- For hint or explanation: you may add hints and/or example. Keep message conversational.`;
+}`;
 
-/** Dan: ACE tuned for Liv (7yo). */
-const DAN_LAYER = `You are Dan. You're tuned for Liv—a bright 7-year-old. Be warm, smart, playful, confident. You can use slightly more advanced wording when it helps.`;
+/** Dan: personality + max length (3 short sentences unless explain). */
+const DAN_LAYER = `You are Dan, tuned for Liv (7). Be warm, smart, playful, confident. Reply in at most 3 short sentences unless the learner asked for an explanation.`;
 
-/** Lila: ACE tuned for Elle (5yo). */
-const LILA_LAYER = `You are Lila. You're tuned for Elle—about 5. Be warm, gentle, simple, encouraging. Use short sentences. Keep replies clear and easy to hear.`;
+/** Lila: personality + max length (2 short sentences unless explain). */
+const LILA_LAYER = `You are Lila, tuned for Elle (5). Be warm, gentle, simple. Use short sentences. Reply in at most 2 short sentences unless the learner asked for an explanation.`;
 
 type AceHelpPayload = {
   sessionId: string;
@@ -54,15 +55,20 @@ type AceHelpPayload = {
 
 type AceHelpResponse = {
   message: string;
-  mode: 'social' | 'greeting' | 'hint' | 'explanation' | 'encouragement' | 'redirect' | 'follow_up';
+  mode: 'social' | 'guide' | 'explain';
   hints: string[];
   example: string;
   shouldSpeak: boolean;
 };
 
-const VALID_MODES: AceHelpResponse['mode'][] = [
-  'social', 'greeting', 'hint', 'explanation', 'encouragement', 'redirect', 'follow_up',
-];
+const VALID_MODES: AceHelpResponse['mode'][] = ['social', 'guide', 'explain'];
+
+function normalizeMode(raw: unknown): AceHelpResponse['mode'] {
+  if (raw === 'social' || raw === 'guide' || raw === 'explain') return raw;
+  if (raw === 'greeting' || raw === 'redirect' || raw === 'encouragement') return 'social';
+  if (raw === 'hint' || raw === 'follow_up') return 'guide';
+  return 'explain';
+}
 
 function parseAceHelp(text: string): AceHelpResponse | null {
   const trimmed = text.trim();
@@ -76,10 +82,7 @@ function parseAceHelp(text: string): AceHelpResponse | null {
         ? String(parsed.explanation).slice(0, 1200).trim()
         : '';
     if (!message) return null;
-    const modeRaw = parsed.mode;
-    const mode = typeof modeRaw === 'string' && VALID_MODES.includes(modeRaw as AceHelpResponse['mode'])
-      ? (modeRaw as AceHelpResponse['mode'])
-      : 'explanation';
+    const mode = normalizeMode(parsed.mode);
     const hintsSource = Array.isArray(parsed.hints) ? (parsed.hints as unknown[]) : [];
     const hints = hintsSource
       .slice(0, 4)
@@ -106,9 +109,9 @@ function parseAceHelp(text: string): AceHelpResponse | null {
 function minimalFallback(helperName: string): AceHelpResponse {
   return {
     message: "I'm here to help with this question. What would you like to try first?",
-    mode: 'explanation',
-    hints: ['Read the question again slowly.', 'Try one small step at a time.'],
-    example: "Let's work on the question together. If you tell me what you've tried, I can give you a hint.",
+    mode: 'guide',
+    hints: [],
+    example: '',
     shouldSpeak: true,
   };
 }
@@ -153,7 +156,7 @@ function fallbackAceHelp(args: {
 
   return {
     message,
-    mode: 'explanation',
+    mode: 'explain',
     hints,
     example,
     shouldSpeak: true,
@@ -197,33 +200,6 @@ async function respondWithTranscript(
   return safeJson(response, meta);
 }
 
-type Intent =
-  | 'gratitude'
-  | 'greeting'
-  | 'confusion'
-  | 'follow_up'
-  | 'hint_request'
-  | 'off_topic'
-  | 'lesson_help';
-
-/**
- * Deterministic intent classifier for the learner's latest message.
- * Order matters: more specific intents are checked first.
- */
-function classifyIntent(message: string): Intent {
-  const m = message.trim().toLowerCase();
-  if (m.length === 0) return 'lesson_help';
-
-  if (/\b(thank|thanks|thx|ty|thank you|thanks so much|thank ya)\b/i.test(m) || /^tysm$/i.test(m)) return 'gratitude';
-  if (/^(hi|hey|hello|howdy|hiya|yo|hi there|hey there)[\s!.]*$/i.test(m) || (m.length <= 12 && /\b(hi|hey|hello)\b/i.test(m))) return 'greeting';
-  if (/\b(how old are you|your favorite|what'?s your (favorite|name)\s*(again)?\s*$|where do you live|do you have (a )?family|are you (a )?real (robot|person)|what do you look like)\b/i.test(m)) return 'off_topic';
-  if (/\b(confused|don'?t get it|don'?t understand|don'?t know|i'?m stuck|i'?m lost|what\?|huh\?|no idea|makes no sense)\b/i.test(m)) return 'confusion';
-  if (/\b(and then|what next|next step|what else|tell me more|again\s*[.?]?$|what about|then what|so then|and after that|one more time|go on)\b/i.test(m)) return 'follow_up';
-  if (/\b(hint|give me a hint|can you hint|need a hint|little hint|just a hint|one hint)\b/i.test(m) || (m.length <= 25 && /\bhelp\b/i.test(m))) return 'hint_request';
-
-  return 'lesson_help';
-}
-
 function responseForGratitude(helperName: string, learnerName: string): AceHelpResponse {
   const name = learnerName || 'you';
   if (helperName === 'Lila') {
@@ -257,8 +233,8 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
   const name = learnerName || 'there';
   if (helperName === 'Lila') {
     return {
-      message: `Hi ${name}! I'm Lila. Ask me if you want a hint or help with the question.`,
-      mode: 'greeting',
+      message: `Hi ${name}! I'm Lila. Ask me if you want a hint.`,
+      mode: 'social',
       hints: [],
       example: '',
       shouldSpeak: true,
@@ -266,8 +242,8 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
   }
   if (helperName === 'Dan') {
     return {
-      message: `Hey ${name}! Dan here. Need a hint or want to work through it together?`,
-      mode: 'greeting',
+      message: `Hey ${name}! Dan here. Need a hint? Just ask.`,
+      mode: 'social',
       hints: [],
       example: '',
       shouldSpeak: true,
@@ -275,7 +251,7 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
   }
   return {
     message: `Hi ${name}! Ask me if you want a hint.`,
-    mode: 'greeting',
+    mode: 'social',
     hints: [],
     example: '',
     shouldSpeak: true,
@@ -285,8 +261,8 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
 function responseForOffTopic(helperName: string): AceHelpResponse {
   if (helperName === 'Lila') {
     return {
-      message: "I'm a robot who loves helping with this question! Let's focus on that—you've got this.",
-      mode: 'redirect',
+      message: "I'm a robot who loves helping with this question! Let's focus on that.",
+      mode: 'social',
       hints: [],
       example: '',
       shouldSpeak: true,
@@ -294,8 +270,8 @@ function responseForOffTopic(helperName: string): AceHelpResponse {
   }
   if (helperName === 'Dan') {
     return {
-      message: "I'm here to help you with this question—let's get back to it!",
-      mode: 'redirect',
+      message: "I'm here to help with this question—let's get back to it!",
+      mode: 'social',
       hints: [],
       example: '',
       shouldSpeak: true,
@@ -303,11 +279,45 @@ function responseForOffTopic(helperName: string): AceHelpResponse {
   }
   return {
     message: "I'm here to help with this question. Let's focus on that!",
-    mode: 'redirect',
+    mode: 'social',
     hints: [],
     example: '',
     shouldSpeak: true,
   };
+}
+
+function responseForSelfIntro(helperName: string, learnerName: string, rawMessage: string): AceHelpResponse {
+  const name = learnerName || extractNameFromIntro(rawMessage) || 'you';
+  if (helperName === 'Lila') {
+    return {
+      message: `Nice to meet you, ${name}! I'm Lila. Ask me if you want a hint.`,
+      mode: 'social',
+      hints: [],
+      example: '',
+      shouldSpeak: true,
+    };
+  }
+  if (helperName === 'Dan') {
+    return {
+      message: `Hey ${name}! Dan here. Need a hint anytime—just ask.`,
+      mode: 'social',
+      hints: [],
+      example: '',
+      shouldSpeak: true,
+    };
+  }
+  return {
+    message: `Nice to meet you, ${name}! Ask me if you want a hint.`,
+    mode: 'social',
+    hints: [],
+    example: '',
+    shouldSpeak: true,
+  };
+}
+
+function extractNameFromIntro(m: string): string {
+  const match = m.match(/(?:my name is|i'?m|i am|call me)\s+([a-z]+)/i);
+  return match ? match[1].trim() : '';
 }
 
 export async function POST(request: Request) {
@@ -465,17 +475,6 @@ export async function POST(request: Request) {
     const intent = classifyIntent(question);
     const resolvedLearnerName = learnerNameFromClient || '';
 
-    if (intent === 'gratitude') {
-      return respondWithTranscript(
-        supabaseInstance,
-        learnerId,
-        sessionIdForLog,
-        resolvedHelperName,
-        responseForGratitude(resolvedHelperName, resolvedLearnerName),
-        { fallback: true, reason: 'intent_gratitude' },
-        transcriptMeta
-      );
-    }
     if (intent === 'greeting') {
       return respondWithTranscript(
         supabaseInstance,
@@ -487,14 +486,36 @@ export async function POST(request: Request) {
         transcriptMeta
       );
     }
-    if (intent === 'off_topic') {
+    if (intent === 'gratitude') {
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        responseForGratitude(resolvedHelperName, resolvedLearnerName),
+        { fallback: true, reason: 'intent_gratitude' },
+        transcriptMeta
+      );
+    }
+    if (intent === 'self_intro') {
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        responseForSelfIntro(resolvedHelperName, resolvedLearnerName, question),
+        { fallback: true, reason: 'intent_self_intro' },
+        transcriptMeta
+      );
+    }
+    if (intent === 'meta_question') {
       return respondWithTranscript(
         supabaseInstance,
         learnerId,
         sessionIdForLog,
         resolvedHelperName,
         responseForOffTopic(resolvedHelperName),
-        { fallback: true, reason: 'intent_off_topic' },
+        { fallback: true, reason: 'intent_meta_question' },
         transcriptMeta
       );
     }
@@ -521,11 +542,11 @@ export async function POST(request: Request) {
 
     const intentInstruction =
       intent === 'follow_up'
-        ? ' The learner is asking a follow-up. Answer from the conversation history only; do NOT repeat the full prior explanation.'
+        ? '[Instruction] Answer from the conversation only. Give ONE next step or ONE guiding question. Do NOT repeat the full explanation.'
         : intent === 'confusion'
-          ? ' The learner is confused. Give a simpler, shorter message and one or two clear hints if needed.'
-          : intent === 'hint_request'
-            ? ' The learner wants a hint. Give a helpful hint; you may add hints and/or a short example. Keep message conversational.'
+          ? '[Instruction] The learner is confused. Give ONE simple next step or one short hint only. Do NOT repeat the lesson.'
+          : intent === 'help_request'
+            ? '[Instruction] Give ONE hint or ONE guiding question. Do NOT restart the full explanation.'
             : '';
 
     const resolvedLearnerNameForPrompt = resolvedLearnerName || 'the learner';
@@ -539,18 +560,36 @@ export async function POST(request: Request) {
 
     const systemPrompt = `${personalityLayer}\n\n${ACE_CORE_PROMPT}`;
 
-    const lessonContextBlock = [
+    const isGuideIntent = intent === 'confusion' || intent === 'follow_up' || intent === 'help_request';
+    const isExplainIntent = intent === 'content_question';
+
+    const minimalContextBlock =
+      prompt || learnerAnswer
+        ? [
+            prompt ? `Current question: ${prompt.slice(0, 400)}.` : null,
+            learnerAnswer?.trim() ? `Learner's answer so far: ${learnerAnswer.slice(0, 200)}.` : null,
+            intentInstruction,
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : intentInstruction || '';
+
+    const fullContextBlock = [
       effectiveDomain ? `Domain: ${effectiveDomain}.` : null,
       skillName ? `Skill: ${skillName}.` : null,
       `Current question: ${prompt.slice(0, 400) || '(unknown)'}.`,
       `Correct answer (do not reveal): ${String(correctAnswer).slice(0, 200) || '(unknown)'}.`,
       learnerAnswer?.trim() ? `Learner's current answer: ${learnerAnswer.slice(0, 200)}.` : null,
-      intentInstruction ? `[Instruction] ${intentInstruction}` : null,
+      '[Instruction] Give a short explanation. You may add hints or an example if they help.',
     ]
       .filter(Boolean)
       .join('\n');
 
-    const latestUserContent = `Learner: ${question.slice(0, 500)}${lessonContextBlock ? `\n\n[Lesson context]\n${lessonContextBlock}` : ''}`;
+    const latestUserContent = isExplainIntent
+      ? `Learner: ${question.slice(0, 500)}\n\n[Lesson context]\n${fullContextBlock}`
+      : isGuideIntent
+        ? `Learner: ${question.slice(0, 500)}${minimalContextBlock ? `\n\n${minimalContextBlock}` : ''}`
+        : `Learner: ${question.slice(0, 500)}`;
 
     const openAIMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt },
