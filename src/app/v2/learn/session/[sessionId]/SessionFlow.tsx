@@ -46,8 +46,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const [completedCount, setCompletedCount] = useState(0);
   const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
 
-  const helperName =
-    learnerSlug === 'liv' ? 'Dan' : learnerSlug === 'elle' ? 'Lila' : 'Ace';
+  const helperName = 'Ace';
 
   const missionTarget = 8;
 

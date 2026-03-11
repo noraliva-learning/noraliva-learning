@@ -46,23 +46,12 @@ export function AceChatPanel({
 
   useEffect(() => {
     if (hasAutoGreeted) return;
-    const isDan = helperName === 'Dan';
-    const isLila = helperName === 'Lila';
-    let text: string;
-    if (isDan) {
-      text = "Hi Liv! I'm Dan. If you ever get stuck, you can ask me.";
-    } else if (isLila) {
-      text = "Hi Elle! I'm Lila. You can talk to me if you want help.";
-    } else {
-      text = `Hi ${learnerName}! I'm ${helperName}. If you ever get stuck, you can ask me.`;
-    }
-
+    const text = `Hi ${learnerName}! I'm Ace. Ask me if you want help with the question.`;
     const greeting: ChatMessage = {
       id: 'auto-greeting',
       from: 'ace',
       text,
     };
-
     setIsOpen(true);
     setMessages([greeting]);
     setHasAutoGreeted(true);
@@ -75,7 +64,7 @@ export function AceChatPanel({
     }
 
     return;
-  }, [helperName, learnerName, hasAutoGreeted]);
+  }, [learnerName, hasAutoGreeted]);
 
   function speak(text: string) {
     if (typeof window === 'undefined') return;
@@ -182,8 +171,8 @@ export function AceChatPanel({
           ['Here are some hints:', ...data.hints.map((h) => `• ${String(h)}`)].join('\n')
         );
       }
-      if (typeof data.example === 'string') {
-        parts.push(`Another example:\n${data.example}`);
+      if (typeof data.example === 'string' && data.example.trim()) {
+        parts.push(`Another example:\n${data.example.trim()}`);
       }
 
       const aceText = parts.join('\n\n');

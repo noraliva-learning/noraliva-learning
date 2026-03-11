@@ -10,18 +10,19 @@ const LOG_PREFIX = '[ace/help]';
 const MAX_TOKENS = 512;
 const TEMPERATURE = 0.5;
 
-/** ACE-direct: learner talks to the model; Dan/Lila are personality wrappers only. */
-const ACE_CORE_PROMPT = `You are a warm conversational tutor. Reply in JSON only, no markdown.
+/** Ace: one tutor identity. Warm, conversational, lesson-aware but not lesson-bound. */
+const ACE_PROMPT = `You are Ace, a warm and intelligent learning companion. The learner is talking to you directly.
 
-Response modes (use exactly one):
-- "social": greeting, thanks, intro, off-topic. One short warm reply. hints: [], example: "".
-- "guide": learner is confused, or asked "what next?", or asked for help. Give ONE next step or ONE guiding question only. Do not restart the lesson. hints: [] unless you add exactly one; example: "" unless needed.
-- "explain": learner asked a content/lesson question. Short explanation; optional hints/example.
+Respond in natural language. You're a real conversation partner, not a hint generator.
+- Reply in JSON only, no markdown. Use "message" for your main reply. Add "hints" or "example" only when they naturally fit (often leave them empty).
+- If the learner says hello, thanks, their name, or something off-topic: respond with a short, warm conversational reply. No lesson block.
+- If they're confused or ask "what next?" or for help: respond with one clear next step or one guiding question. Build on the conversation; don't restart the lesson.
+- If they ask about the content: give a short explanation through dialogue. Optional hints/example only when helpful.
 
 Rules:
-- Kid-safe. No personal questions (family, school, location).
+- Kid-safe. No personal questions (family, school, location). Warm redirect if off-topic.
 - Stay warm. Never say you are an AI.
-- Only add hints or example when mode is "explain" and they help.
+- Lesson context (question, domain, skill) is provided when relevant—use it to help through dialogue, not as a script.
 
 JSON shape:
 {
@@ -31,12 +32,6 @@ JSON shape:
   "example": "",
   "shouldSpeak": true
 }`;
-
-/** Dan: personality + max length (3 short sentences unless explain). */
-const DAN_LAYER = `You are Dan, tuned for Liv (7). Be warm, smart, playful, confident. Reply in at most 3 short sentences unless the learner asked for an explanation.`;
-
-/** Lila: personality + max length (2 short sentences unless explain). */
-const LILA_LAYER = `You are Lila, tuned for Elle (5). Be warm, gentle, simple. Use short sentences. Reply in at most 2 short sentences unless the learner asked for an explanation.`;
 
 type AceHelpPayload = {
   sessionId: string;
@@ -200,28 +195,10 @@ async function respondWithTranscript(
   return safeJson(response, meta);
 }
 
-function responseForGratitude(helperName: string, learnerName: string): AceHelpResponse {
+function responseForGratitude(learnerName: string): AceHelpResponse {
   const name = learnerName || 'you';
-  if (helperName === 'Lila') {
-    return {
-      message: `You're welcome, ${name}. I'm happy to help. Want to try it together?`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
-  if (helperName === 'Dan') {
-    return {
-      message: `You're welcome, ${name}! Glad that helped. Ready to try the next step when you are.`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
   return {
-    message: `You're welcome! I'm happy to help.`,
+    message: `You're welcome, ${name}! I'm happy to help.`,
     mode: 'social',
     hints: [],
     example: '',
@@ -229,28 +206,10 @@ function responseForGratitude(helperName: string, learnerName: string): AceHelpR
   };
 }
 
-function responseForGreeting(helperName: string, learnerName: string): AceHelpResponse {
+function responseForGreeting(learnerName: string): AceHelpResponse {
   const name = learnerName || 'there';
-  if (helperName === 'Lila') {
-    return {
-      message: `Hi ${name}! I'm Lila. Ask me if you want a hint.`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
-  if (helperName === 'Dan') {
-    return {
-      message: `Hey ${name}! Dan here. Need a hint? Just ask.`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
   return {
-    message: `Hi ${name}! Ask me if you want a hint.`,
+    message: `Hi ${name}! I'm Ace. Ask me if you want help with the question.`,
     mode: 'social',
     hints: [],
     example: '',
@@ -258,27 +217,9 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
   };
 }
 
-function responseForOffTopic(helperName: string): AceHelpResponse {
-  if (helperName === 'Lila') {
-    return {
-      message: "I'm a robot who loves helping with this question! Let's focus on that.",
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
-  if (helperName === 'Dan') {
-    return {
-      message: "I'm here to help with this question—let's get back to it!",
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
+function responseForOffTopic(): AceHelpResponse {
   return {
-    message: "I'm here to help with this question. Let's focus on that!",
+    message: "I'm here to help with this question—let's focus on that!",
     mode: 'social',
     hints: [],
     example: '',
@@ -286,28 +227,10 @@ function responseForOffTopic(helperName: string): AceHelpResponse {
   };
 }
 
-function responseForSelfIntro(helperName: string, learnerName: string, rawMessage: string): AceHelpResponse {
+function responseForSelfIntro(learnerName: string, rawMessage: string): AceHelpResponse {
   const name = learnerName || extractNameFromIntro(rawMessage) || 'you';
-  if (helperName === 'Lila') {
-    return {
-      message: `Nice to meet you, ${name}! I'm Lila. Ask me if you want a hint.`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
-  if (helperName === 'Dan') {
-    return {
-      message: `Hey ${name}! Dan here. Need a hint anytime—just ask.`,
-      mode: 'social',
-      hints: [],
-      example: '',
-      shouldSpeak: true,
-    };
-  }
   return {
-    message: `Nice to meet you, ${name}! Ask me if you want a hint.`,
+    message: `Nice to meet you, ${name}! I'm Ace. Ask me if you want help.`,
     mode: 'social',
     hints: [],
     example: '',
@@ -481,7 +404,7 @@ export async function POST(request: Request) {
         learnerId,
         sessionIdForLog,
         resolvedHelperName,
-        responseForGreeting(resolvedHelperName, resolvedLearnerName),
+        responseForGreeting(resolvedLearnerName),
         { fallback: true, reason: 'intent_greeting' },
         transcriptMeta
       );
@@ -492,7 +415,7 @@ export async function POST(request: Request) {
         learnerId,
         sessionIdForLog,
         resolvedHelperName,
-        responseForGratitude(resolvedHelperName, resolvedLearnerName),
+        responseForGratitude(resolvedLearnerName),
         { fallback: true, reason: 'intent_gratitude' },
         transcriptMeta
       );
@@ -503,7 +426,7 @@ export async function POST(request: Request) {
         learnerId,
         sessionIdForLog,
         resolvedHelperName,
-        responseForSelfIntro(resolvedHelperName, resolvedLearnerName, question),
+        responseForSelfIntro(resolvedLearnerName, question),
         { fallback: true, reason: 'intent_self_intro' },
         transcriptMeta
       );
@@ -514,7 +437,7 @@ export async function POST(request: Request) {
         learnerId,
         sessionIdForLog,
         resolvedHelperName,
-        responseForOffTopic(resolvedHelperName),
+        responseForOffTopic(),
         { fallback: true, reason: 'intent_meta_question' },
         transcriptMeta
       );
@@ -542,23 +465,14 @@ export async function POST(request: Request) {
 
     const intentInstruction =
       intent === 'follow_up'
-        ? '[Instruction] Answer from the conversation only. Give ONE next step or ONE guiding question. Do NOT repeat the full explanation.'
+        ? 'Answer from the conversation. One next step or one guiding question is enough.'
         : intent === 'confusion'
-          ? '[Instruction] The learner is confused. Give ONE simple next step or one short hint only. Do NOT repeat the lesson.'
+          ? 'The learner is confused. One simple next step or one short hint.'
           : intent === 'help_request'
-            ? '[Instruction] Give ONE hint or ONE guiding question. Do NOT restart the full explanation.'
+            ? 'One hint or one guiding question.'
             : '';
 
-    const resolvedLearnerNameForPrompt = resolvedLearnerName || 'the learner';
-
-    const personalityLayer =
-      resolvedHelperName === 'Lila'
-        ? LILA_LAYER
-        : resolvedHelperName === 'Dan'
-          ? DAN_LAYER
-          : `You are ${resolvedHelperName}, a friendly tutor for ${resolvedLearnerNameForPrompt}.`;
-
-    const systemPrompt = `${personalityLayer}\n\n${ACE_CORE_PROMPT}`;
+    const systemPrompt = ACE_PROMPT;
 
     const isGuideIntent = intent === 'confusion' || intent === 'follow_up' || intent === 'help_request';
     const isExplainIntent = intent === 'content_question';
@@ -580,7 +494,7 @@ export async function POST(request: Request) {
       `Current question: ${prompt.slice(0, 400) || '(unknown)'}.`,
       `Correct answer (do not reveal): ${String(correctAnswer).slice(0, 200) || '(unknown)'}.`,
       learnerAnswer?.trim() ? `Learner's current answer: ${learnerAnswer.slice(0, 200)}.` : null,
-      '[Instruction] Give a short explanation. You may add hints or an example if they help.',
+      'Respond in natural language; add hints or example only if they fit.',
     ]
       .filter(Boolean)
       .join('\n');
