@@ -162,3 +162,16 @@ export interface ChatLog {
   content: string;
   created_at: string;
 }
+
+/** ACE tutor transcript row (Dan/Lila); parent can review. */
+export interface TutorTranscriptRow {
+  id: string;
+  learner_id: string;
+  session_id: string | null;
+  created_at: string;
+  helper_name: string;
+  role: "learner" | "tutor" | "system";
+  content: string;
+  input_source: "text" | "voice" | null;
+  metadata: Record<string, unknown>;
+}

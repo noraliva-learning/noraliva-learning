@@ -7,6 +7,7 @@ import { AceMessage } from './AceMessage';
 type AceChatPanelProps = {
   sessionId: string;
   learnerName: string;
+  learnerSlug?: string;
   helperName: string;
   domain: string;
   exerciseId: string | null;
@@ -24,6 +25,7 @@ type ChatMessage = {
 export function AceChatPanel({
   sessionId,
   learnerName,
+  learnerSlug,
   helperName,
   domain,
   exerciseId,
@@ -94,7 +96,7 @@ export function AceChatPanel({
     speak(lastAceText);
   }
 
-  async function handleSend(questionOverride?: string) {
+  async function handleSend(questionOverride?: string, fromVoice?: boolean) {
     const trimmed = questionOverride != null ? questionOverride.trim() : input.trim();
     if (!trimmed || loading) return;
 
@@ -134,6 +136,8 @@ export function AceChatPanel({
           helperName,
           learnerName,
           history,
+          learnerSlug: learnerSlug ?? undefined,
+          inputSource: fromVoice ? 'voice' : 'text',
         }),
       });
       if (!res.ok) {
@@ -237,7 +241,7 @@ export function AceChatPanel({
         // Pass transcript so handleSend doesn't rely on stale input state.
         Promise.resolve().then(() => {
           (async () => {
-            await handleSend(trimmed);
+            await handleSend(trimmed, true);
           })().catch(() => {});
         });
       };

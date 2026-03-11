@@ -362,6 +362,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
         <AceChatPanel
           sessionId={sessionId}
           learnerName={learnerName}
+          learnerSlug={learnerSlug}
           helperName={helperName}
           domain={domain}
           exerciseId={exercise?.exerciseId ?? null}

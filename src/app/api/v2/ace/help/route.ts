@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { getLearnerContextForGeneration } from '@/lib/ai/getLearnerContextForAI';
+import { insertTutorTranscriptRow } from '@/lib/db/tutorTranscript';
 
 const LOG_PREFIX = '[ace/help]';
 
@@ -40,6 +41,8 @@ type AceHelpPayload = {
   question: string;
   helperName?: string;
   learnerName?: string;
+  learnerSlug?: string;
+  inputSource?: 'text' | 'voice';
   history?: { role: 'user' | 'assistant'; content: string }[];
 };
 
@@ -137,6 +140,131 @@ function safeJson(response: AceHelpResponse, meta: { fallback: boolean; reason?:
   );
 }
 
+/** Format tutor reply for transcript (single string). */
+function formatTutorContent(r: AceHelpResponse): string {
+  const parts: string[] = [r.explanation];
+  if (r.hints?.length) parts.push('Hints: ' + r.hints.join(' '));
+  if (r.example?.trim()) parts.push('Example: ' + r.example.trim());
+  return parts.join('\n\n').slice(0, 10000);
+}
+
+async function respondWithTranscript(
+  supabase: Awaited<ReturnType<typeof createClient>> | null,
+  learnerId: string | null,
+  sessionId: string | null,
+  helperName: string,
+  response: AceHelpResponse,
+  meta: { fallback: boolean; reason?: string },
+  metadata?: Record<string, unknown>
+): Promise<NextResponse> {
+  if (supabase && learnerId) {
+    await insertTutorTranscriptRow(supabase, {
+      learnerId,
+      sessionId,
+      helperName,
+      role: 'tutor',
+      content: formatTutorContent(response),
+      metadata: metadata ?? {},
+    });
+  }
+  return safeJson(response, meta);
+}
+
+type Intent =
+  | 'gratitude'
+  | 'greeting'
+  | 'confusion'
+  | 'follow_up'
+  | 'hint_request'
+  | 'off_topic'
+  | 'lesson_help';
+
+/**
+ * Deterministic intent classifier for the learner's latest message.
+ * Order matters: more specific intents are checked first.
+ */
+function classifyIntent(message: string): Intent {
+  const m = message.trim().toLowerCase();
+  if (m.length === 0) return 'lesson_help';
+
+  if (/\b(thank|thanks|thx|ty|thank you|thanks so much|thank ya)\b/i.test(m) || /^tysm$/i.test(m)) return 'gratitude';
+  if (/^(hi|hey|hello|howdy|hiya|yo|hi there|hey there)[\s!.]*$/i.test(m) || (m.length <= 12 && /\b(hi|hey|hello)\b/i.test(m))) return 'greeting';
+  if (/\b(how old are you|your favorite|what'?s your (favorite|name)\s*(again)?\s*$|where do you live|do you have (a )?family|are you (a )?real (robot|person)|what do you look like)\b/i.test(m)) return 'off_topic';
+  if (/\b(confused|don'?t get it|don'?t understand|don'?t know|i'?m stuck|i'?m lost|what\?|huh\?|no idea|makes no sense)\b/i.test(m)) return 'confusion';
+  if (/\b(and then|what next|next step|what else|tell me more|again\s*[.?]?$|what about|then what|so then|and after that|one more time|go on)\b/i.test(m)) return 'follow_up';
+  if (/\b(hint|give me a hint|can you hint|need a hint|little hint|just a hint|one hint)\b/i.test(m) || (m.length <= 25 && /\bhelp\b/i.test(m))) return 'hint_request';
+
+  return 'lesson_help';
+}
+
+function responseForGratitude(helperName: string, learnerName: string): AceHelpResponse {
+  const name = learnerName || 'you';
+  if (helperName === 'Lila') {
+    return {
+      explanation: `You're welcome, ${name}. I'm happy to help. Want to try it together?`,
+      hints: [],
+      example: '',
+    };
+  }
+  if (helperName === 'Dan') {
+    return {
+      explanation: `You're welcome, ${name}! Glad that helped. Ready to try the next step when you are.`,
+      hints: [],
+      example: '',
+    };
+  }
+  return {
+    explanation: `You're welcome! I'm happy to help.`,
+    hints: [],
+    example: '',
+  };
+}
+
+function responseForGreeting(helperName: string, learnerName: string): AceHelpResponse {
+  const name = learnerName || 'there';
+  if (helperName === 'Lila') {
+    return {
+      explanation: `Hi ${name}! I'm Lila. Ask me if you want a hint or help with the question.`,
+      hints: [],
+      example: '',
+    };
+  }
+  if (helperName === 'Dan') {
+    return {
+      explanation: `Hey ${name}! Dan here. Need a hint or want to work through it together?`,
+      hints: [],
+      example: '',
+    };
+  }
+  return {
+    explanation: `Hi ${name}! Ask me if you want a hint.`,
+    hints: [],
+    example: '',
+  };
+}
+
+function responseForOffTopic(helperName: string): AceHelpResponse {
+  if (helperName === 'Lila') {
+    return {
+      explanation: "I'm a robot who loves helping with this question! Let's focus on that—you've got this.",
+      hints: [],
+      example: '',
+    };
+  }
+  if (helperName === 'Dan') {
+    return {
+      explanation: "I'm here to help you with this question—let's get back to it!",
+      hints: [],
+      example: '',
+    };
+  }
+  return {
+    explanation: "I'm here to help with this question. Let's focus on that!",
+    hints: [],
+    example: '',
+  };
+}
+
 export async function POST(request: Request) {
   let body: Partial<AceHelpPayload> = {};
   try {
@@ -155,6 +283,8 @@ export async function POST(request: Request) {
   const preferredSkillId = typeof body.skillId === 'string' ? body.skillId : undefined;
   const helperNameFromClient = typeof body.helperName === 'string' ? body.helperName : undefined;
   const learnerNameFromClient = typeof body.learnerName === 'string' ? body.learnerName : undefined;
+  const learnerSlugFromClient = typeof body.learnerSlug === 'string' ? body.learnerSlug : undefined;
+  const inputSource = body.inputSource === 'voice' || body.inputSource === 'text' ? body.inputSource : 'text';
   const resolvedHelperName = helperNameFromClient || 'Ace';
 
   const rawHistory = Array.isArray(body.history) ? body.history : [];
@@ -175,6 +305,10 @@ export async function POST(request: Request) {
   let correctAnswer = '';
   let effectiveDomain = clientDomain;
   let skillName: string | undefined;
+  let learnerId: string | null = null;
+  let sessionIdForLog: string | null = null;
+  let transcriptMeta: { domain?: string; skill_id?: string; exercise_id?: string; current_question?: string; learner_answer_at_time?: string } = {};
+  let supabaseInstance: Awaited<ReturnType<typeof createClient>> | null = null;
 
   try {
     const supabase = await createClient();
@@ -209,7 +343,23 @@ export async function POST(request: Request) {
       return safeJson(minimalFallback(resolvedHelperName), { fallback: true, reason: 'forbidden' });
     }
 
+    learnerId = session.learner_id;
+    sessionIdForLog = session.id;
+    supabaseInstance = supabase;
     effectiveDomain = effectiveDomain ?? (session as { domain?: string }).domain;
+
+    let learnerAgeLevel: string | null = null;
+    const { data: learnerProfile } = await supabase
+      .from('profiles')
+      .select('age, grade_label')
+      .eq('id', session.learner_id)
+      .maybeSingle();
+    if (learnerProfile) {
+      const a = (learnerProfile as { age?: number | null }).age;
+      const g = (learnerProfile as { grade_label?: string | null }).grade_label;
+      if (a != null) learnerAgeLevel = `age ${a}`;
+      else if (g) learnerAgeLevel = g;
+    }
 
     const { data: exercise, error: exError } = await supabase
       .from('exercises')
@@ -235,6 +385,25 @@ export async function POST(request: Request) {
       .single();
     const skillId = (lesson as { skill_id?: string } | null)?.skill_id ?? preferredSkillId;
 
+    transcriptMeta = {
+      domain: effectiveDomain ?? undefined,
+      skill_id: skillId ?? undefined,
+      exercise_id: exerciseId,
+      current_question: prompt ? prompt.slice(0, 500) : undefined,
+      learner_answer_at_time: learnerAnswer?.slice(0, 300),
+    };
+    if (learnerId && supabaseInstance) {
+      await insertTutorTranscriptRow(supabaseInstance, {
+        learnerId,
+        sessionId: sessionIdForLog,
+        helperName: resolvedHelperName,
+        role: 'learner',
+        content: question,
+        inputSource,
+        metadata: transcriptMeta,
+      });
+    }
+
     try {
       if (skillId) {
         const ctx = await getLearnerContextForGeneration(supabase, sessionId, skillId);
@@ -248,6 +417,43 @@ export async function POST(request: Request) {
       // Continue with prompt/domain we have.
     }
 
+    const intent = classifyIntent(question);
+    const resolvedLearnerName = learnerNameFromClient || '';
+
+    if (intent === 'gratitude') {
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        responseForGratitude(resolvedHelperName, resolvedLearnerName),
+        { fallback: true, reason: 'intent_gratitude' },
+        transcriptMeta
+      );
+    }
+    if (intent === 'greeting') {
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        responseForGreeting(resolvedHelperName, resolvedLearnerName),
+        { fallback: true, reason: 'intent_greeting' },
+        transcriptMeta
+      );
+    }
+    if (intent === 'off_topic') {
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        responseForOffTopic(resolvedHelperName),
+        { fallback: true, reason: 'intent_off_topic' },
+        transcriptMeta
+      );
+    }
+
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       const fallback = fallbackAceHelp({
@@ -257,10 +463,27 @@ export async function POST(request: Request) {
         domain: effectiveDomain,
         skillName,
       });
-      return safeJson(fallback, { fallback: true, reason: 'no_api_key' });
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        fallback,
+        { fallback: true, reason: 'no_api_key' },
+        transcriptMeta
+      );
     }
 
-    const resolvedLearnerName = learnerNameFromClient || 'the learner';
+    const intentInstruction =
+      intent === 'follow_up'
+        ? ' The learner is asking a follow-up. Answer from the conversation history only; do NOT repeat the full prior explanation or hint block.'
+        : intent === 'confusion'
+          ? ' The learner is confused. Give a simpler, shorter explanation and one or two clear hints.'
+          : intent === 'hint_request'
+            ? ' The learner wants a hint. Give a helpful hint (and optionally a short example) without repeating the full explanation unless needed.'
+            : '';
+
+    const resolvedLearnerNameForPrompt = resolvedLearnerName || 'the learner';
 
     const danSystem = `You are Dan, a warm, smart, playful, confident robot tutor for Liv (a bright 7-year-old). You can use slightly more advanced wording when it helps. You feel like a clever robot helper who's on her side.
 
@@ -275,9 +498,11 @@ ${BASE_RULES}`;
         ? lilaSystem
         : resolvedHelperName === 'Dan'
           ? danSystem
-          : `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerName} learn.\n\n${BASE_RULES}`;
+          : `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerNameForPrompt} learn.\n\n${BASE_RULES}`;
 
     const contextBlock = [
+      `Learner: ${resolvedLearnerNameForPrompt}${learnerSlugFromClient ? ` (slug: ${learnerSlugFromClient})` : ''}${learnerAgeLevel ? `. ${learnerAgeLevel}.` : '.'}`,
+      `Helper: ${resolvedHelperName}.`,
       effectiveDomain ? `Domain: ${effectiveDomain}.` : null,
       skillName ? `Skill: ${skillName}.` : null,
       `Current question on screen: ${prompt.slice(0, 500) || '(unknown)'}.`,
@@ -286,6 +511,7 @@ ${BASE_RULES}`;
         learnerAnswer?.trim() ? learnerAnswer.slice(0, 300) : '(not answered yet)'
       }.`,
       `Learner's latest message: ${question.slice(0, 400)}.`,
+      intentInstruction ? `[Instruction]${intentInstruction}` : null,
     ]
       .filter(Boolean)
       .join('\n');
@@ -315,7 +541,15 @@ ${BASE_RULES}`;
         domain: effectiveDomain,
         skillName,
       });
-      return safeJson(fallback, { fallback: true, reason: 'openai_error' });
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        fallback,
+        { fallback: true, reason: 'openai_error' },
+        transcriptMeta
+      );
     }
 
     if (!raw) {
@@ -326,7 +560,15 @@ ${BASE_RULES}`;
         domain: effectiveDomain,
         skillName,
       });
-      return safeJson(fallback, { fallback: true, reason: 'openai_empty' });
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        fallback,
+        { fallback: true, reason: 'openai_empty' },
+        transcriptMeta
+      );
     }
 
     const parsed = parseAceHelp(raw);
@@ -339,10 +581,26 @@ ${BASE_RULES}`;
         domain: effectiveDomain,
         skillName,
       });
-      return safeJson(fallback, { fallback: true, reason: 'parse' });
+      return respondWithTranscript(
+        supabaseInstance,
+        learnerId,
+        sessionIdForLog,
+        resolvedHelperName,
+        fallback,
+        { fallback: true, reason: 'parse' },
+        transcriptMeta
+      );
     }
 
-    return safeJson(parsed, { fallback: false });
+    return respondWithTranscript(
+      supabaseInstance,
+      learnerId,
+      sessionIdForLog,
+      resolvedHelperName,
+      parsed,
+      { fallback: false },
+      transcriptMeta
+    );
   } catch (e) {
     console.error(LOG_PREFIX, 'unexpected error', e);
     const fallback = prompt
@@ -354,6 +612,14 @@ ${BASE_RULES}`;
           skillName,
         })
       : minimalFallback(resolvedHelperName);
-    return safeJson(fallback, { fallback: true, reason: 'exception' });
+    return respondWithTranscript(
+      supabaseInstance ?? null,
+      learnerId,
+      sessionIdForLog,
+      resolvedHelperName,
+      fallback,
+      { fallback: true, reason: 'exception' },
+      transcriptMeta
+    );
   }
 }
