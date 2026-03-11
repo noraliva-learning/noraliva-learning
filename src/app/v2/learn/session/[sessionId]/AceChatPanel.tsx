@@ -152,24 +152,31 @@ export function AceChatPanel({
         return;
       }
       const rawBody = await res.text();
-      let data: { explanation?: string; hints?: string[]; example?: string } = {};
+      let data: {
+        message?: string;
+        explanation?: string;
+        hints?: string[];
+        example?: string;
+        shouldSpeak?: boolean;
+      } = {};
       try {
         data = rawBody ? (JSON.parse(rawBody) as typeof data) : {};
       } catch {
         setError(`${helperName} had trouble answering. Try again.`);
         return;
       }
-      const hasContent =
-        (typeof data.explanation === 'string' && data.explanation.length > 0) ||
-        (Array.isArray(data.hints) && data.hints.length > 0) ||
-        (typeof data.example === 'string' && data.example.length > 0);
-      if (!hasContent) {
+      const message =
+        typeof data.message === 'string' && data.message.length > 0
+          ? data.message
+          : typeof data.explanation === 'string' && data.explanation.length > 0
+            ? data.explanation
+            : '';
+      if (!message) {
         setError(`${helperName} had trouble answering. Try again.`);
         return;
       }
 
-      const parts: string[] = [];
-      if (typeof data.explanation === 'string') parts.push(data.explanation);
+      const parts: string[] = [message];
       if (Array.isArray(data.hints) && data.hints.length > 0) {
         parts.push(
           ['Here are some hints:', ...data.hints.map((h) => `• ${String(h)}`)].join('\n')
@@ -179,9 +186,8 @@ export function AceChatPanel({
         parts.push(`Another example:\n${data.example}`);
       }
 
-      const aceText =
-        parts.join('\n\n') ||
-        'Let’s look at the question step by step. Try to explain what the question is asking in your own words first.';
+      const aceText = parts.join('\n\n');
+      const shouldSpeak = data.shouldSpeak !== false;
 
       const aceMsg: ChatMessage = {
         id: `helper-${Date.now()}`,
@@ -190,7 +196,7 @@ export function AceChatPanel({
       };
       setMessages((prev) => [...prev, aceMsg]);
       setLastAceText(aceText);
-      speak(aceText);
+      if (shouldSpeak) speak(aceText);
     } catch (e) {
       setError(`${helperName} had trouble answering. Try again.`);
     } finally {

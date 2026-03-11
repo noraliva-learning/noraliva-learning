@@ -9,27 +9,33 @@ const LOG_PREFIX = '[ace/help]';
 const MAX_TOKENS = 512;
 const TEMPERATURE = 0.5;
 
-const BASE_RULES = `Safety and style rules:
-- Use kid-friendly language. Do NOT ask personal questions (no family, friends, feelings, address, school name, or location).
-- If the learner asks something off-topic or personal (e.g. "how old are you?"), respond with a warm, playful redirect to the lesson—e.g. "I'm a robot who loves helping with this question! Let's focus on that." Do not refuse or scold. Then optionally add one short hint about the current question.
-- Stay emotionally warm. Never mention that you are an AI model.
+/** ACE core: one conversational tutor prompt. Social-first, intent-aware, child-safe. */
+const ACE_CORE_PROMPT = `You are a warm, conversational tutor. Respond to what the learner means first—then help with the lesson only when it fits.
 
-Conversational intent — respond first to what the learner means, then help with the lesson if needed:
-- Greeting (e.g. "hi", "hey") → short warm greeting back. No full explanation.
-- Gratitude (e.g. "thank you", "thanks Lila") → warm social reply only, e.g. "You're welcome! You're doing great." Do NOT repeat your previous explanation or hints.
-- Help or hint request → give explanation and/or hints and an example as needed. Avoid repeating the exact same explanation you already gave in the conversation; build on it or shorten.
-- Confusion ("I don't get it", "I'm confused") → simpler, shorter explanation and one or two clear hints.
-- Frustration → acknowledge briefly, encourage, then offer one simple next step.
-- Off-topic curiosity → playful redirect, then one hint for the current question if it fits.
-- Follow-up (e.g. "and then?", "what about the next step?") → use the conversation history; answer the follow-up without repeating the full prior explanation.
+Rules:
+- Use kid-friendly language. Do NOT ask personal questions (no family, friends, address, school, location).
+- If they say hello, thank you, or introduce themselves (e.g. "my name is Elle"), reply with a short, warm social response. No lesson block.
+- If they're confused or want help, give a simpler explanation or one or two hints. Build on the conversation; don't repeat yourself.
+- If they ask a follow-up ("what next?", "and then?"), continue from where you left off. Do not restart the full explanation.
+- If they go off-topic (e.g. "how old are you?"), give a brief, playful redirect to the question. No lesson block.
+- Stay warm. Never mention you are an AI.
 
-Return JSON only, no markdown:
+Return JSON only, no markdown. Use "message" as the main reply. Only add hints/example when you're actually giving lesson help.
 {
-  "explanation": "your main reply (can be social-only or include lesson help)",
-  "hints": ["optional hint 1", "optional hint 2"],
-  "example": "optional short example or empty string"
+  "message": "your main reply—conversational and direct",
+  "mode": "social | greeting | hint | explanation | encouragement | redirect | follow_up",
+  "hints": [],
+  "example": "",
+  "shouldSpeak": true
 }
-For social-only replies (e.g. thank you), put your reply in "explanation" and use "hints": [] and "example": "".`;
+- For social, greeting, redirect, follow_up: put everything in "message"; use hints: [] and example: "".
+- For hint or explanation: you may add hints and/or example. Keep message conversational.`;
+
+/** Dan: ACE tuned for Liv (7yo). */
+const DAN_LAYER = `You are Dan. You're tuned for Liv—a bright 7-year-old. Be warm, smart, playful, confident. You can use slightly more advanced wording when it helps.`;
+
+/** Lila: ACE tuned for Elle (5yo). */
+const LILA_LAYER = `You are Lila. You're tuned for Elle—about 5. Be warm, gentle, simple, encouraging. Use short sentences. Keep replies clear and easy to hear.`;
 
 type AceHelpPayload = {
   sessionId: string;
@@ -47,10 +53,16 @@ type AceHelpPayload = {
 };
 
 type AceHelpResponse = {
-  explanation: string;
+  message: string;
+  mode: 'social' | 'greeting' | 'hint' | 'explanation' | 'encouragement' | 'redirect' | 'follow_up';
   hints: string[];
   example: string;
+  shouldSpeak: boolean;
 };
+
+const VALID_MODES: AceHelpResponse['mode'][] = [
+  'social', 'greeting', 'hint', 'explanation', 'encouragement', 'redirect', 'follow_up',
+];
 
 function parseAceHelp(text: string): AceHelpResponse | null {
   const trimmed = text.trim();
@@ -58,8 +70,16 @@ function parseAceHelp(text: string): AceHelpResponse | null {
   if (!jsonMatch) return null;
   try {
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-    if (typeof parsed.explanation !== 'string') return null;
-    const explanation = String(parsed.explanation).slice(0, 1200);
+    const message = typeof parsed.message === 'string'
+      ? String(parsed.message).slice(0, 1200).trim()
+      : typeof parsed.explanation === 'string'
+        ? String(parsed.explanation).slice(0, 1200).trim()
+        : '';
+    if (!message) return null;
+    const modeRaw = parsed.mode;
+    const mode = typeof modeRaw === 'string' && VALID_MODES.includes(modeRaw as AceHelpResponse['mode'])
+      ? (modeRaw as AceHelpResponse['mode'])
+      : 'explanation';
     const hintsSource = Array.isArray(parsed.hints) ? (parsed.hints as unknown[]) : [];
     const hints = hintsSource
       .slice(0, 4)
@@ -67,12 +87,15 @@ function parseAceHelp(text: string): AceHelpResponse | null {
       .filter((h) => h.length > 0);
     const example =
       typeof parsed.example === 'string'
-        ? String(parsed.example).slice(0, 600)
+        ? String(parsed.example).slice(0, 600).trim()
         : '';
+    const shouldSpeak = typeof parsed.shouldSpeak === 'boolean' ? parsed.shouldSpeak : true;
     return {
-      explanation,
+      message,
+      mode,
       hints,
       example,
+      shouldSpeak,
     };
   } catch {
     return null;
@@ -82,9 +105,11 @@ function parseAceHelp(text: string): AceHelpResponse | null {
 /** Safe reply when we have no context (e.g. auth/session failed). */
 function minimalFallback(helperName: string): AceHelpResponse {
   return {
-    explanation: "I'm here to help with this question. What would you like to try first?",
+    message: "I'm here to help with this question. What would you like to try first?",
+    mode: 'explanation',
     hints: ['Read the question again slowly.', 'Try one small step at a time.'],
     example: "Let's work on the question together. If you tell me what you've tried, I can give you a hint.",
+    shouldSpeak: true,
   };
 }
 
@@ -99,7 +124,7 @@ function fallbackAceHelp(args: {
   const baseTopic =
     skillName ||
     (domain ? `${domain} skill` : 'this idea');
-  const explanation = `Let's think about ${baseTopic} together. The question is: "${prompt}". Try to picture what the question is really asking before you jump to an answer.`;
+  const message = `Let's think about ${baseTopic} together. The question is: "${prompt}". Try to picture what the question is really asking before you jump to an answer.`;
 
   const cleanedLearner = (learnerAnswer ?? '').trim();
   const cleanedCorrect = (correctAnswer ?? '').trim();
@@ -127,9 +152,11 @@ function fallbackAceHelp(args: {
   }
 
   return {
-    explanation,
+    message,
+    mode: 'explanation',
     hints,
     example,
+    shouldSpeak: true,
   };
 }
 
@@ -140,9 +167,9 @@ function safeJson(response: AceHelpResponse, meta: { fallback: boolean; reason?:
   );
 }
 
-/** Format tutor reply for transcript (single string). */
+/** Format tutor reply for transcript: one coherent string (message + optional hints + optional example). */
 function formatTutorContent(r: AceHelpResponse): string {
-  const parts: string[] = [r.explanation];
+  const parts: string[] = [r.message];
   if (r.hints?.length) parts.push('Hints: ' + r.hints.join(' '));
   if (r.example?.trim()) parts.push('Example: ' + r.example.trim());
   return parts.join('\n\n').slice(0, 10000);
@@ -201,22 +228,28 @@ function responseForGratitude(helperName: string, learnerName: string): AceHelpR
   const name = learnerName || 'you';
   if (helperName === 'Lila') {
     return {
-      explanation: `You're welcome, ${name}. I'm happy to help. Want to try it together?`,
+      message: `You're welcome, ${name}. I'm happy to help. Want to try it together?`,
+      mode: 'social',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   if (helperName === 'Dan') {
     return {
-      explanation: `You're welcome, ${name}! Glad that helped. Ready to try the next step when you are.`,
+      message: `You're welcome, ${name}! Glad that helped. Ready to try the next step when you are.`,
+      mode: 'social',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   return {
-    explanation: `You're welcome! I'm happy to help.`,
+    message: `You're welcome! I'm happy to help.`,
+    mode: 'social',
     hints: [],
     example: '',
+    shouldSpeak: true,
   };
 }
 
@@ -224,44 +257,56 @@ function responseForGreeting(helperName: string, learnerName: string): AceHelpRe
   const name = learnerName || 'there';
   if (helperName === 'Lila') {
     return {
-      explanation: `Hi ${name}! I'm Lila. Ask me if you want a hint or help with the question.`,
+      message: `Hi ${name}! I'm Lila. Ask me if you want a hint or help with the question.`,
+      mode: 'greeting',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   if (helperName === 'Dan') {
     return {
-      explanation: `Hey ${name}! Dan here. Need a hint or want to work through it together?`,
+      message: `Hey ${name}! Dan here. Need a hint or want to work through it together?`,
+      mode: 'greeting',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   return {
-    explanation: `Hi ${name}! Ask me if you want a hint.`,
+    message: `Hi ${name}! Ask me if you want a hint.`,
+    mode: 'greeting',
     hints: [],
     example: '',
+    shouldSpeak: true,
   };
 }
 
 function responseForOffTopic(helperName: string): AceHelpResponse {
   if (helperName === 'Lila') {
     return {
-      explanation: "I'm a robot who loves helping with this question! Let's focus on that—you've got this.",
+      message: "I'm a robot who loves helping with this question! Let's focus on that—you've got this.",
+      mode: 'redirect',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   if (helperName === 'Dan') {
     return {
-      explanation: "I'm here to help you with this question—let's get back to it!",
+      message: "I'm here to help you with this question—let's get back to it!",
+      mode: 'redirect',
       hints: [],
       example: '',
+      shouldSpeak: true,
     };
   }
   return {
-    explanation: "I'm here to help with this question. Let's focus on that!",
+    message: "I'm here to help with this question. Let's focus on that!",
+    mode: 'redirect',
     hints: [],
     example: '',
+    shouldSpeak: true,
   };
 }
 
@@ -476,50 +521,41 @@ export async function POST(request: Request) {
 
     const intentInstruction =
       intent === 'follow_up'
-        ? ' The learner is asking a follow-up. Answer from the conversation history only; do NOT repeat the full prior explanation or hint block.'
+        ? ' The learner is asking a follow-up. Answer from the conversation history only; do NOT repeat the full prior explanation.'
         : intent === 'confusion'
-          ? ' The learner is confused. Give a simpler, shorter explanation and one or two clear hints.'
+          ? ' The learner is confused. Give a simpler, shorter message and one or two clear hints if needed.'
           : intent === 'hint_request'
-            ? ' The learner wants a hint. Give a helpful hint (and optionally a short example) without repeating the full explanation unless needed.'
+            ? ' The learner wants a hint. Give a helpful hint; you may add hints and/or a short example. Keep message conversational.'
             : '';
 
     const resolvedLearnerNameForPrompt = resolvedLearnerName || 'the learner';
 
-    const danSystem = `You are Dan, a warm, smart, playful, confident robot tutor for Liv (a bright 7-year-old). You can use slightly more advanced wording when it helps. You feel like a clever robot helper who's on her side.
-
-${BASE_RULES}`;
-
-    const lilaSystem = `You are Lila, a warm, gentle, simple, encouraging robot tutor for Elle (about 5). Use short sentences. Elle may use voice more than typing, so keep replies clear and easy to hear. You feel like a kind robot helper who's patient and cheering her on.
-
-${BASE_RULES}`;
-
-    const systemPrompt =
+    const personalityLayer =
       resolvedHelperName === 'Lila'
-        ? lilaSystem
+        ? LILA_LAYER
         : resolvedHelperName === 'Dan'
-          ? danSystem
-          : `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerNameForPrompt} learn.\n\n${BASE_RULES}`;
+          ? DAN_LAYER
+          : `You are ${resolvedHelperName}, a friendly tutor for ${resolvedLearnerNameForPrompt}.`;
 
-    const contextBlock = [
-      `Learner: ${resolvedLearnerNameForPrompt}${learnerSlugFromClient ? ` (slug: ${learnerSlugFromClient})` : ''}${learnerAgeLevel ? `. ${learnerAgeLevel}.` : '.'}`,
-      `Helper: ${resolvedHelperName}.`,
+    const systemPrompt = `${personalityLayer}\n\n${ACE_CORE_PROMPT}`;
+
+    const lessonContextBlock = [
       effectiveDomain ? `Domain: ${effectiveDomain}.` : null,
       skillName ? `Skill: ${skillName}.` : null,
-      `Current question on screen: ${prompt.slice(0, 500) || '(unknown)'}.`,
-      `Correct answer (guide hints only; do not reveal): ${String(correctAnswer).slice(0, 300) || '(unknown)'}.`,
-      `Learner's current answer: ${
-        learnerAnswer?.trim() ? learnerAnswer.slice(0, 300) : '(not answered yet)'
-      }.`,
-      `Learner's latest message: ${question.slice(0, 400)}.`,
-      intentInstruction ? `[Instruction]${intentInstruction}` : null,
+      `Current question: ${prompt.slice(0, 400) || '(unknown)'}.`,
+      `Correct answer (do not reveal): ${String(correctAnswer).slice(0, 200) || '(unknown)'}.`,
+      learnerAnswer?.trim() ? `Learner's current answer: ${learnerAnswer.slice(0, 200)}.` : null,
+      intentInstruction ? `[Instruction] ${intentInstruction}` : null,
     ]
       .filter(Boolean)
       .join('\n');
 
+    const latestUserContent = `Learner: ${question.slice(0, 500)}${lessonContextBlock ? `\n\n[Lesson context]\n${lessonContextBlock}` : ''}`;
+
     const openAIMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt },
       ...history.map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: contextBlock },
+      { role: 'user', content: latestUserContent },
     ];
 
     let raw: string | null = null;
