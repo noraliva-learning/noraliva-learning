@@ -10,13 +10,11 @@ const MAX_TOKENS = 512;
 const TEMPERATURE = 0.6;
 
 /** Minimal system prompt: Ace as direct conversational companion. */
-const ACE_SYSTEM_PROMPT = `You are Ace, a warm, intelligent learning companion for children.
-Speak naturally.
-Respond to the learner's conversational meaning first.
-Help with the lesson through dialogue, not canned blocks.
-Keep language child-safe and age-appropriate.
-Do not ask for school, address, or location.
-Be warm, clear, and intelligent.`;
+const ACE_SYSTEM_PROMPT = `You are Ace, a warm, intelligent conversational learning companion for children.
+Respond naturally to what the learner actually says.
+Be clear, kind, and age-appropriate.
+If there is lesson context, use it only if it is relevant to the learner’s question.
+Do not ask for school, address, or location.`;
 
 type AceHelpPayload = {
   sessionId: string;
@@ -101,10 +99,10 @@ function buildLessonContext(p: {
 }): string {
   const parts: string[] = [];
   if (p.prompt) parts.push(`Current question: ${p.prompt.slice(0, 400)}`);
-  if (p.learnerAnswer?.trim()) parts.push(`Learner's answer so far: ${p.learnerAnswer.slice(0, 200)}`);
+  if (p.learnerAnswer?.trim()) parts.push(`Learner answer so far: ${p.learnerAnswer.slice(0, 200)}`);
   if (p.domain) parts.push(`Domain: ${p.domain}`);
   if (p.skillName) parts.push(`Skill: ${p.skillName}`);
-  return parts.join('. ');
+  return parts.join('\n');
 }
 
 export async function POST(request: Request) {
@@ -262,10 +260,12 @@ export async function POST(request: Request) {
       skillName,
     });
 
+    const learnerLine = `Learner says: "${question.slice(0, 500)}"`;
+
     const userContent =
       lessonContext.length > 0
-        ? `Learner: ${question.slice(0, 500)}\n\n[Lesson context] ${lessonContext}`
-        : `Learner: ${question.slice(0, 500)}`;
+        ? `${learnerLine}\n\nOptional context:\n${lessonContext}`
+        : learnerLine;
 
     const openAIMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: ACE_SYSTEM_PROMPT },
