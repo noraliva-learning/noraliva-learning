@@ -94,12 +94,12 @@ export function AceChatPanel({
     speak(lastAceText);
   }
 
-  async function handleSend() {
-    const trimmed = input.trim();
+  async function handleSend(questionOverride?: string) {
+    const trimmed = questionOverride != null ? questionOverride.trim() : input.trim();
     if (!trimmed || loading) return;
 
     if (!hasExerciseContext) {
-      setError('Ace can help as soon as a question is ready on the screen.');
+      setError(`${helperName} can help as soon as a question is ready on the screen.`);
       return;
     }
 
@@ -110,7 +110,7 @@ export function AceChatPanel({
       text: trimmed,
     };
     setMessages((prev) => [...prev, learnerMsg]);
-    setInput('');
+    if (questionOverride == null) setInput('');
     setLoading(true);
 
     try {
@@ -130,25 +130,41 @@ export function AceChatPanel({
         }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || res.statusText);
+        const rawBody = await res.text();
+        let errData: { error?: string } = {};
+        try {
+          errData = rawBody ? (JSON.parse(rawBody) as typeof errData) : {};
+        } catch {
+          /* ignore */
+        }
+        setError(`${helperName} had trouble answering. Try again.`);
+        return;
       }
-      const data = (await res.json()) as {
-        explanation?: string;
-        hints?: string[];
-        example?: string;
-      };
+      const rawBody = await res.text();
+      let data: { explanation?: string; hints?: string[]; example?: string } = {};
+      try {
+        data = rawBody ? (JSON.parse(rawBody) as typeof data) : {};
+      } catch {
+        setError(`${helperName} had trouble answering. Try again.`);
+        return;
+      }
+      const hasContent =
+        (typeof data.explanation === 'string' && data.explanation.length > 0) ||
+        (Array.isArray(data.hints) && data.hints.length > 0) ||
+        (typeof data.example === 'string' && data.example.length > 0);
+      if (!hasContent) {
+        setError(`${helperName} had trouble answering. Try again.`);
+        return;
+      }
 
       const parts: string[] = [];
-      if (data.explanation) {
-        parts.push(data.explanation);
-      }
-      if (data.hints && data.hints.length) {
+      if (typeof data.explanation === 'string') parts.push(data.explanation);
+      if (Array.isArray(data.hints) && data.hints.length > 0) {
         parts.push(
-          ['Here are some hints:', ...data.hints.map((h) => `• ${h}`)].join('\n')
+          ['Here are some hints:', ...data.hints.map((h) => `• ${String(h)}`)].join('\n')
         );
       }
-      if (data.example) {
+      if (typeof data.example === 'string') {
         parts.push(`Another example:\n${data.example}`);
       }
 
@@ -157,7 +173,7 @@ export function AceChatPanel({
         'Let’s look at the question step by step. Try to explain what the question is asking in your own words first.';
 
       const aceMsg: ChatMessage = {
-        id: `ace-${Date.now()}`,
+        id: `helper-${Date.now()}`,
         from: 'ace',
         text: aceText,
       };
@@ -165,7 +181,7 @@ export function AceChatPanel({
       setLastAceText(aceText);
       speak(aceText);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ace had trouble answering. Please try again.');
+      setError(`${helperName} had trouble answering. Try again.`);
     } finally {
       setLoading(false);
     }
@@ -211,14 +227,11 @@ export function AceChatPanel({
           return;
         }
         setInput(trimmed);
-        // Send immediately so it feels like a voice question.
-        // Use a microtask so state updates apply first.
+        // Pass transcript so handleSend doesn't rely on stale input state.
         Promise.resolve().then(() => {
           (async () => {
-            await handleSend();
-          })().catch(() => {
-            // errors are already handled in handleSend
-          });
+            await handleSend(trimmed);
+          })().catch(() => {});
         });
       };
 
@@ -275,7 +288,13 @@ export function AceChatPanel({
               <span>Ask {helperName}</span>
             </button>
             <div className="flex-1">
-              <AceInput value={input} onChange={setInput} onSend={handleSend} disabled={loading} />
+              <AceInput
+              value={input}
+              onChange={setInput}
+              onSend={() => handleSend()}
+              disabled={loading}
+              helperName={helperName}
+            />
             </div>
             <button
               type="button"
