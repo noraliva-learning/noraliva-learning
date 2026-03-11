@@ -9,22 +9,26 @@ const MAX_TOKENS = 512;
 const TEMPERATURE = 0.5;
 
 const BASE_RULES = `Safety and style rules:
-- Use kid-friendly language (simple, clear, encouraging).
-- Do NOT ask personal questions (no questions about family, friends, feelings, address, online accounts, or anything outside the lesson).
-- Stay focused only on the lesson content (the domain and skill provided).
-- If the learner asks something off-topic or personal, reply with: "I'm here to help with this question." Then give 1-2 short hints about the current question only. Do not refuse or scold.
-- Be brief and concrete. Avoid long speeches.
-- Use second person ("you") and short sentences.
-- Never mention that you are an AI model.
+- Use kid-friendly language. Do NOT ask personal questions (no family, friends, feelings, address, school name, or location).
+- If the learner asks something off-topic or personal (e.g. "how old are you?"), respond with a warm, playful redirect to the lesson—e.g. "I'm a robot who loves helping with this question! Let's focus on that." Do not refuse or scold. Then optionally add one short hint about the current question.
+- Stay emotionally warm. Never mention that you are an AI model.
 
-Your job: explain the concept, give 1-3 hints, and offer another example that matches the domain and skill.
+Conversational intent — respond first to what the learner means, then help with the lesson if needed:
+- Greeting (e.g. "hi", "hey") → short warm greeting back. No full explanation.
+- Gratitude (e.g. "thank you", "thanks Lila") → warm social reply only, e.g. "You're welcome! You're doing great." Do NOT repeat your previous explanation or hints.
+- Help or hint request → give explanation and/or hints and an example as needed. Avoid repeating the exact same explanation you already gave in the conversation; build on it or shorten.
+- Confusion ("I don't get it", "I'm confused") → simpler, shorter explanation and one or two clear hints.
+- Frustration → acknowledge briefly, encourage, then offer one simple next step.
+- Off-topic curiosity → playful redirect, then one hint for the current question if it fits.
+- Follow-up (e.g. "and then?", "what about the next step?") → use the conversation history; answer the follow-up without repeating the full prior explanation.
 
-Return JSON only, no markdown or explanation outside the JSON:
+Return JSON only, no markdown:
 {
-  "explanation": "short paragraph for a kid",
-  "hints": ["short hint 1", "short hint 2"],
-  "example": "another simple example problem with answer explained"
-}`;
+  "explanation": "your main reply (can be social-only or include lesson help)",
+  "hints": ["optional hint 1", "optional hint 2"],
+  "example": "optional short example or empty string"
+}
+For social-only replies (e.g. thank you), put your reply in "explanation" and use "hints": [] and "example": "".`;
 
 type AceHelpPayload = {
   sessionId: string;
@@ -36,6 +40,7 @@ type AceHelpPayload = {
   question: string;
   helperName?: string;
   learnerName?: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
 };
 
 type AceHelpResponse = {
@@ -51,7 +56,7 @@ function parseAceHelp(text: string): AceHelpResponse | null {
   try {
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
     if (typeof parsed.explanation !== 'string') return null;
-    const explanation = String(parsed.explanation).slice(0, 1000);
+    const explanation = String(parsed.explanation).slice(0, 1200);
     const hintsSource = Array.isArray(parsed.hints) ? (parsed.hints as unknown[]) : [];
     const hints = hintsSource
       .slice(0, 4)
@@ -152,6 +157,15 @@ export async function POST(request: Request) {
   const learnerNameFromClient = typeof body.learnerName === 'string' ? body.learnerName : undefined;
   const resolvedHelperName = helperNameFromClient || 'Ace';
 
+  const rawHistory = Array.isArray(body.history) ? body.history : [];
+  const history = rawHistory
+    .slice(-10)
+    .filter(
+      (m): m is { role: 'user' | 'assistant'; content: string } =>
+        (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string'
+    )
+    .map((m) => ({ role: m.role, content: String(m.content).slice(0, 500) }));
+
   if (!sessionId || typeof sessionId !== 'string' || !exerciseId || typeof exerciseId !== 'string' || !question) {
     console.error(LOG_PREFIX, 'validation failed', { sessionId: !!sessionId, exerciseId: !!exerciseId, question: !!question });
     return safeJson(minimalFallback(resolvedHelperName), { fallback: true, reason: 'validation' });
@@ -247,31 +261,47 @@ export async function POST(request: Request) {
     }
 
     const resolvedLearnerName = learnerNameFromClient || 'the learner';
-    const systemPrompt = `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerName} learn.
+
+    const danSystem = `You are Dan, a warm, smart, playful, confident robot tutor for Liv (a bright 7-year-old). You can use slightly more advanced wording when it helps. You feel like a clever robot helper who's on her side.
 
 ${BASE_RULES}`;
-    const userMessage = [
+
+    const lilaSystem = `You are Lila, a warm, gentle, simple, encouraging robot tutor for Elle (about 5). Use short sentences. Elle may use voice more than typing, so keep replies clear and easy to hear. You feel like a kind robot helper who's patient and cheering her on.
+
+${BASE_RULES}`;
+
+    const systemPrompt =
+      resolvedHelperName === 'Lila'
+        ? lilaSystem
+        : resolvedHelperName === 'Dan'
+          ? danSystem
+          : `You are a friendly robot named ${resolvedHelperName} who helps ${resolvedLearnerName} learn.\n\n${BASE_RULES}`;
+
+    const contextBlock = [
       effectiveDomain ? `Domain: ${effectiveDomain}.` : null,
       skillName ? `Skill: ${skillName}.` : null,
-      `Session question/prompt: ${prompt.slice(0, 500) || '(unknown prompt)'}.`,
-      `Correct answer (do not reveal directly; only use to guide hints and explanations): ${String(correctAnswer).slice(0, 300) || '(unknown)'}.`,
+      `Current question on screen: ${prompt.slice(0, 500) || '(unknown)'}.`,
+      `Correct answer (guide hints only; do not reveal): ${String(correctAnswer).slice(0, 300) || '(unknown)'}.`,
       `Learner's current answer: ${
-        learnerAnswer?.trim() ? learnerAnswer.slice(0, 300) : '(has not answered yet or answer not provided)'
+        learnerAnswer?.trim() ? learnerAnswer.slice(0, 300) : '(not answered yet)'
       }.`,
-      `Learner's question: ${question.slice(0, 400)}.`,
+      `Learner's latest message: ${question.slice(0, 400)}.`,
     ]
       .filter(Boolean)
       .join('\n');
+
+    const openAIMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'user', content: contextBlock },
+    ];
 
     let raw: string | null = null;
     try {
       const openai = new OpenAI({ apiKey });
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
+        messages: openAIMessages,
         max_tokens: MAX_TOKENS,
         temperature: TEMPERATURE,
       });

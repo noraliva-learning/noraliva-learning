@@ -113,6 +113,12 @@ export function AceChatPanel({
     if (questionOverride == null) setInput('');
     setLoading(true);
 
+    const previousMessages = messages;
+    const history = previousMessages.slice(-10).map((m) => ({
+      role: m.from === 'learner' ? ('user' as const) : ('assistant' as const),
+      content: m.text,
+    }));
+
     try {
       const res = await fetch('/api/v2/ace/help', {
         method: 'POST',
@@ -127,6 +133,7 @@ export function AceChatPanel({
           question: trimmed,
           helperName,
           learnerName,
+          history,
         }),
       });
       if (!res.ok) {
