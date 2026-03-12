@@ -46,7 +46,8 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const [completedCount, setCompletedCount] = useState(0);
   const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
 
-  const helperName = 'Dan';
+  // Learner-specific tutor identity: Liv → Dan, Elle → Lila
+  const helperName = learnerSlug === 'elle' ? 'Lila' : 'Dan';
 
   const missionTarget = 8;
 
@@ -253,9 +254,12 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
         )}
 
         <p className="text-lg font-semibold text-slate-900">
-          {feedback.correct ? 'You got it right!' : 'Good try! Keep going.'}
+          {feedback.correct
+            ? (feedback.encouragementMessage ||
+                ['You got it right!', 'You got it!', `Nice work, ${learnerName}!`, "Yes — that's right!"][completedCount % 4])
+            : 'Good try! Keep going.'}
         </p>
-        {feedback.encouragementMessage && (
+        {feedback.encouragementMessage && !feedback.correct && (
           <p className="mt-1 text-slate-700">{feedback.encouragementMessage}</p>
         )}
         <p className="mt-1 text-sm text-slate-600">You&apos;re at level {feedback.masteryLevel} on this skill.</p>

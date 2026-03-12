@@ -47,7 +47,7 @@ export function AceChatPanel({
 
   useEffect(() => {
     if (hasAutoGreeted) return;
-    const text = `Hi ${learnerName}! I'm Dan. Ask me if you want help with the question.`;
+    const text = `Hi ${learnerName}! I'm ${helperName}. Ask me if you want help with the question.`;
     const greeting: ChatMessage = {
       id: 'auto-greeting',
       from: 'ace',
@@ -65,7 +65,7 @@ export function AceChatPanel({
     }
 
     return;
-  }, [learnerName, hasAutoGreeted]);
+  }, [learnerName, helperName, hasAutoGreeted]);
 
   useEffect(() => {
     const el = messagesEndRef.current;
@@ -138,7 +138,7 @@ export function AceChatPanel({
           domain,
           skillId,
           question: trimmed,
-          helperName: 'Dan',
+          helperName,
           learnerName,
           history,
           learnerSlug: learnerSlug ?? undefined,
@@ -147,7 +147,7 @@ export function AceChatPanel({
         }),
       });
       if (!res.ok || !res.body) {
-        setError('Dan had trouble answering. Please try again.');
+        setError(`${helperName} had trouble answering. Please try again.`);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -183,7 +183,7 @@ export function AceChatPanel({
 
       const finalText = fullText.trim();
       if (!finalText) {
-        setError('Dan had trouble answering. Please try again.');
+        setError(`${helperName} had trouble answering. Please try again.`);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -200,7 +200,7 @@ export function AceChatPanel({
       setLastAceText(finalText);
       speak(finalText);
     } catch (e) {
-      setError('Dan had trouble answering. Please try again.');
+      setError(`${helperName} had trouble answering. Please try again.`);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
