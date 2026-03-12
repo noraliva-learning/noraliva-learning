@@ -52,6 +52,8 @@ Set these in **Vercel** (and in `.env.local` for local dev):
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes  | Supabase anon/public key. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes*     | Server-only; for bootstrap/scripts. Never expose to client. |
 | `OPENAI_API_KEY`            | For full MVP | Needed for tutor (`/api/v2/dan/help`) and AI exercise generation. If unset: tutor returns a friendly “AI unavailable” message; generate-exercise uses fallback math. |
+| `OPENAI_DAN_MODEL`          | No          | Model for Responses API (default: `gpt-5-mini`). Override if your account uses a different model name. |
+| `OPENAI_DAN_FALLBACK_MODEL` | No          | If Responses API fails (e.g. model not available), Dan falls back to Chat Completions with this model (default: `gpt-4o-mini`). |
 
 \* Required for `npm run bootstrap:users` and any server-side admin; optional for the app at runtime if no such scripts run in production.
 

@@ -14,10 +14,10 @@ Single tutor identity: **Ace** only. No Dan/Lila. Learner talks directly to Ace;
 
 After pushing to the preview branch, get the URL from:
 
-- Vercel dashboard → Deployments → latest deployment for that branch, or  
-- Git push output (e.g. `https://noraliva-learning-xxx-…vercel.app`).
+- **Vercel dashboard:** Project → **Deployments** → click the latest deployment for branch `preview/ask-ace` → copy the deployment URL.
+- **GitHub PR:** If you open a PR from `preview/ask-ace`, Vercel usually comments with the preview URL, or it appears in the PR checks.
 
-Preview branch: `preview/ask-ace` (or as chosen).
+Preview branch: `preview/ask-ace`. **Do not merge to main until you've verified the preview.**
 
 ## 3. Unchanged
 
@@ -30,12 +30,12 @@ Preview branch: `preview/ask-ace` (or as chosen).
 
 ## 4. Short test plan (5 prompts)
 
-| User says | Expect |
-|-----------|--------|
-| "My name is Elle" | Short-circuit self_intro: Ace says something like "Nice to meet you, Elle! I'm Ace. Ask me if you want help." |
-| "I'm confused" | Guide-style: one simple next step or short hint (no full lesson repeat). |
-| "What do I do next?" | Guide-style: one next step or one guiding question from conversation/lesson. |
-| "Thank you Ace" | Short-circuit gratitude: Ace says you're welcome, warm and brief. |
-| "How old are you?" | Off-topic / meta: warm redirect to the question (e.g. "I'm here to help with this question—let's focus on that!"). |
+**Checklist (preview only):**
 
-Manual: open a session, open Ask Ace, type each phrase, confirm response type and tone.
+- [ ] **"My name is Elle"** → Ace: "Nice to meet you, Elle! I'm Ace. Ask me if you want help."
+- [ ] **"I'm confused"** → Ace: one simple next step or short hint (no full lesson).
+- [ ] **"What do I do next?"** → Ace: one next step or one guiding question.
+- [ ] **"Thank you Ace"** → Ace: you're welcome, warm and brief.
+- [ ] **"How old are you?"** → Ace: warm redirect to the question (e.g. "I'm here to help with this question—let's focus on that!").
+
+Open a session → Ask Ace → type each phrase → check response.

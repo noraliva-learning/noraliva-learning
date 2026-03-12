@@ -14,6 +14,9 @@
     "env:check": "tsx scripts/check-env.ts",
     "env:fix": "tsx scripts/fix-env-file.ts",
     "bootstrap:users": "npm run env:check && tsx scripts/bootstrap-users.ts",
+    "preview:url": "tsx scripts/get-preview-url.ts",
+    "vercel:diagnostic": "tsx scripts/vercel-diagnostic.ts",
+    "verify:preview": "playwright test --config=playwright.preview.config.js",
     "dev:clean": "npm run env:check && next dev",
     "postinstall": "patch-package"
   },
