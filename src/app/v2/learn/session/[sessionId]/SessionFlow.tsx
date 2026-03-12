@@ -333,8 +333,8 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const progressPercent = Math.max(0, Math.min(100, (safeCompleted / missionTarget) * 100));
 
   return (
-    <div className="mt-6 lg:flex lg:items-start lg:gap-4">
-      <div className="flex-1">
+    <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -357,7 +357,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
 
         {body}
       </div>
-      <div className="lg:mt-0 lg:shrink-0">
+      <div className="w-full shrink-0 lg:mt-0 lg:w-80" data-testid="ask-dan-panel">
         <AceChatPanel
           sessionId={sessionId}
           learnerName={learnerName}

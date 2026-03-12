@@ -59,7 +59,7 @@ export default async function SessionPage({ params }: Props) {
 
   return (
     <main className="min-h-screen p-6">
-      <header className="mx-auto flex max-w-2xl items-center justify-between">
+      <header className="mx-auto flex max-w-4xl items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">{domainLabel} practice</h1>
         <Link
           href={`/v2/learners/${learnerSlug}`}
@@ -69,7 +69,7 @@ export default async function SessionPage({ params }: Props) {
         </Link>
       </header>
 
-      <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-slate-600">Hey {learnerName}, you&apos;re practicing <strong>{domainLabel}</strong>.</p>
 
         <SessionFlow
