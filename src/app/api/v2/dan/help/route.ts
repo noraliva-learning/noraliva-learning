@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getOpenAIClient } from '@/lib/openai';
+import OpenAI from 'openai';
 import { insertTutorTranscriptRow, type TutorTranscriptMetadata } from '@/lib/db/tutorTranscript';
 
 const LOG_PREFIX = '[dan/help]';
+
+const USER_FACING_ERROR = "Sorry, I had trouble answering that. Please try again.";
+
+/** Return 200 text/plain so the client displays this as Dan's message instead of raw JSON. */
+function textPlainError(message: string = USER_FACING_ERROR): Response {
+  return new Response(message, {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+}
 
 const DAN_SYSTEM_PROMPT = `You are Dan, a warm, intelligent conversational learning companion for children.
 
@@ -115,21 +126,29 @@ function buildHistorySummary(history: DanHelpHistoryItem[]): string | null {
 }
 
 export async function POST(request: Request) {
+  console.log(LOG_PREFIX, 'route hit');
   let body: Partial<DanHelpPayload> = {};
 
   try {
-    body = (await request.json().catch(() => ({}))) as Partial<DanHelpPayload>;
+    body = (await request.json().catch((e) => {
+      console.error(LOG_PREFIX, 'request.json catch', e);
+      return {};
+    })) as Partial<DanHelpPayload>;
   } catch (err) {
     console.error(LOG_PREFIX, 'failed to parse body', err);
-    return NextResponse.json(
-      { error: 'Invalid request', message: "Sorry, I had trouble answering that. Please try again." },
-      { status: 200 }
-    );
+    return textPlainError(USER_FACING_ERROR);
   }
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   const exerciseId = typeof body.exerciseId === 'string' ? body.exerciseId : '';
   const learnerUtterance = typeof body.question === 'string' ? body.question.trim() : '';
+
+  console.log(LOG_PREFIX, 'body check', {
+    hasSessionId: !!sessionId,
+    hasExerciseId: !!exerciseId,
+    hasQuestion: !!learnerUtterance,
+    questionLen: learnerUtterance.length,
+  });
 
   if (!sessionId || !exerciseId || !learnerUtterance) {
     console.error(LOG_PREFIX, 'missing required fields', {
@@ -137,10 +156,7 @@ export async function POST(request: Request) {
       hasExerciseId: !!exerciseId,
       hasQuestion: !!learnerUtterance,
     });
-    return NextResponse.json(
-      { error: 'Missing required fields', message: "Sorry, I had trouble answering that. Please try again." },
-      { status: 200 }
-    );
+    return textPlainError(USER_FACING_ERROR);
   }
 
   const helperName = body.helperName || 'Dan';
@@ -168,11 +184,9 @@ export async function POST(request: Request) {
 
   if (authError || !user) {
     console.error(LOG_PREFIX, 'auth failure', authError?.message);
-    return NextResponse.json(
-      { error: 'Not authenticated', message: "Sorry, I had trouble answering that. Please try again." },
-      { status: 200 }
-    );
+    return textPlainError(USER_FACING_ERROR);
   }
+  console.log(LOG_PREFIX, 'auth ok', { userId: user.id });
 
   let learnerId: string | null = null;
   let sessionIdForLog: string | null = null;
@@ -190,18 +204,12 @@ export async function POST(request: Request) {
 
     if (sessionError || !session) {
       console.error(LOG_PREFIX, 'session lookup failed', sessionError?.message);
-      return NextResponse.json(
-        { error: 'Session not found', message: "Sorry, I had trouble answering that. Please try again." },
-        { status: 200 }
-      );
+      return textPlainError(USER_FACING_ERROR);
     }
 
     if (session.learner_id !== user.id) {
       console.error(LOG_PREFIX, 'forbidden: learner does not own session');
-      return NextResponse.json(
-        { error: 'Forbidden', message: "Sorry, I had trouble answering that. Please try again." },
-        { status: 200 }
-      );
+      return textPlainError(USER_FACING_ERROR);
     }
 
     learnerId = session.learner_id;
@@ -216,10 +224,7 @@ export async function POST(request: Request) {
 
     if (exerciseError || !exercise) {
       console.error(LOG_PREFIX, 'exercise lookup failed', exerciseError?.message);
-      return NextResponse.json(
-        { error: 'Exercise not found', message: "Sorry, I had trouble answering that. Please try again." },
-        { status: 200 }
-      );
+      return textPlainError(USER_FACING_ERROR);
     }
 
     const effectivePrompt = prompt ?? (exercise as { prompt?: string | null }).prompt ?? null;
@@ -239,15 +244,25 @@ export async function POST(request: Request) {
     transcriptMeta.learner_answer_at_time = learnerAnswer ?? undefined;
 
     if (learnerId && sessionIdForLog) {
-      await insertTutorTranscriptRow(supabase, {
-        learnerId,
-        sessionId: sessionIdForLog,
-        helperName,
-        role: 'learner',
-        content: learnerUtterance.slice(0, 1000),
-        inputSource,
-        metadata: transcriptMeta,
-      });
+      try {
+        const insertResult = await insertTutorTranscriptRow(supabase, {
+          learnerId,
+          sessionId: sessionIdForLog,
+          helperName,
+          role: 'learner',
+          content: learnerUtterance.slice(0, 1000),
+          inputSource,
+          metadata: transcriptMeta,
+        });
+        if (insertResult.error) {
+          console.error(LOG_PREFIX, 'transcript learner insert failed', insertResult.error.message);
+        } else {
+          console.log(LOG_PREFIX, 'transcript learner insert ok');
+        }
+      } catch (transcriptErr) {
+        console.error(LOG_PREFIX, 'transcript learner insert threw', transcriptErr);
+        // Continue; do not block Dan from answering.
+      }
     }
 
     // For now, we keep skillName simple; future versions can enrich this from a dedicated context helper.
@@ -282,76 +297,65 @@ export async function POST(request: Request) {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       console.error(LOG_PREFIX, 'missing OPENAI_API_KEY');
-      return NextResponse.json(
-        { error: 'AI unavailable', message: "Sorry, I had trouble answering that. Please try again." },
-        { status: 200 }
-      );
+      return textPlainError(USER_FACING_ERROR);
+    }
+    console.log(LOG_PREFIX, 'OPENAI_API_KEY present');
+
+    let client: OpenAI;
+    try {
+      client = getOpenAIClient();
+    } catch (clientErr) {
+      const msg = clientErr instanceof Error ? clientErr.message : String(clientErr);
+      console.error(LOG_PREFIX, 'getOpenAIClient failed', msg, clientErr);
+      return textPlainError(USER_FACING_ERROR);
     }
 
-    const client = getOpenAIClient();
+    const model = process.env.OPENAI_DAN_MODEL?.trim() || 'gpt-4o-mini';
+    console.log(LOG_PREFIX, 'OpenAI call start (non-streaming)', { model });
 
-    const stream = await client.responses.stream({
-      model: 'gpt-5-mini',
-      input: [
-        {
-          role: 'system',
-          content: [
-            {
-              type: 'input_text',
-              text: DAN_SYSTEM_PROMPT,
-            },
-          ],
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: finalUserMessage,
-            },
-          ],
-        },
-      ],
-      max_output_tokens: 512,
-    });
+    let tutorText: string;
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [
+          { role: 'system', content: [{ type: 'input_text', text: DAN_SYSTEM_PROMPT }] },
+          { role: 'user', content: [{ type: 'input_text', text: finalUserMessage }] },
+        ],
+        max_output_tokens: 512,
+      });
+      tutorText = typeof (response as { output_text?: string }).output_text === 'string'
+        ? (response as { output_text: string }).output_text
+        : '';
+    } catch (responsesErr) {
+      const errMsg = responsesErr instanceof Error ? responsesErr.message : String(responsesErr);
+      console.error(LOG_PREFIX, 'responses.create failed', errMsg, responsesErr);
+      return textPlainError(USER_FACING_ERROR);
+    }
 
-    const encoder = new TextEncoder();
-    let fullText = '';
+    const trimmed = (tutorText ?? '').trim();
+    const finalText = trimmed || USER_FACING_ERROR;
 
-    const readable = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        try {
-          for await (const event of stream) {
-            if (event.type === 'response.output_text.delta') {
-              const delta = event.delta ?? '';
-              if (typeof delta === 'string' && delta.length > 0) {
-                fullText += delta;
-                controller.enqueue(encoder.encode(delta));
-              }
-            }
-          }
-
-          const trimmed = fullText.trim();
-          if (trimmed && learnerId && sessionIdForLog) {
-            await insertTutorTranscriptRow(supabase, {
-              learnerId,
-              sessionId: sessionIdForLog,
-              helperName,
-              role: 'tutor',
-              content: trimmed.slice(0, 10000),
-              metadata: transcriptMeta,
-            });
-          }
-
-          controller.close();
-        } catch (err) {
-          console.error(LOG_PREFIX, 'streaming error', err);
-          controller.error(err);
+    if (trimmed && learnerId && sessionIdForLog) {
+      try {
+        const insertResult = await insertTutorTranscriptRow(supabase, {
+          learnerId,
+          sessionId: sessionIdForLog,
+          helperName,
+          role: 'tutor',
+          content: trimmed.slice(0, 10000),
+          metadata: transcriptMeta,
+        });
+        if (insertResult.error) {
+          console.error(LOG_PREFIX, 'transcript tutor insert failed', insertResult.error.message);
+        } else {
+          console.log(LOG_PREFIX, 'transcript tutor insert ok');
         }
-      },
-    });
+      } catch (transcriptErr) {
+        console.error(LOG_PREFIX, 'transcript tutor insert threw', transcriptErr);
+      }
+    }
 
-    return new Response(readable, {
+    return new Response(finalText, {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
@@ -359,11 +363,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
-    console.error(LOG_PREFIX, 'unexpected error', err);
-    return NextResponse.json(
-      { error: 'Unexpected error', message: "Sorry, I had trouble answering that. Please try again." },
-      { status: 200 }
-    );
+    console.error(LOG_PREFIX, 'unexpected error', err instanceof Error ? err.message : String(err), err);
+    return textPlainError(USER_FACING_ERROR);
   }
 }
 
