@@ -1,3 +1,8 @@
+/**
+ * DEPRECATED (MVP): Canonical Ask Ace tutor is POST /api/v2/dan/help.
+ * That route uses OpenAI Responses API + gpt-5-mini + streaming and transcript logging.
+ * This route remains for backward compatibility only; learner UI uses /api/v2/dan/help only.
+ */
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
