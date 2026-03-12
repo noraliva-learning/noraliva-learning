@@ -15,6 +15,12 @@ export function AceInput({ value, onChange, onSend, disabled, helperName }: AceI
         rows={2}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !disabled) {
+            e.preventDefault();
+            onSend();
+          }
+        }}
         placeholder={`Ask ${helperName} for a hint or explanation…`}
         className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:bg-slate-50"
         disabled={disabled}

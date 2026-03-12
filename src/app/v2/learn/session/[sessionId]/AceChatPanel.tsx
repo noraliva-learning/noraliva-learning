@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AceInput } from './AceInput';
 import { AceMessage } from './AceMessage';
 
@@ -41,12 +41,13 @@ export function AceChatPanel({
   const [listening, setListening] = useState(false);
   const [lastAceText, setLastAceText] = useState<string | null>(null);
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const hasExerciseContext = useMemo(() => !!exerciseId && !!prompt, [exerciseId, prompt]);
 
   useEffect(() => {
     if (hasAutoGreeted) return;
-    const text = `Hi ${learnerName}! I'm Ace. Ask me if you want help with the question.`;
+    const text = `Hi ${learnerName}! I'm Dan. Ask me if you want help with the question.`;
     const greeting: ChatMessage = {
       id: 'auto-greeting',
       from: 'ace',
@@ -65,6 +66,12 @@ export function AceChatPanel({
 
     return;
   }, [learnerName, hasAutoGreeted]);
+
+  useEffect(() => {
+    const el = messagesEndRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length]);
 
   function speak(text: string) {
     if (typeof window === 'undefined') return;
@@ -100,7 +107,16 @@ export function AceChatPanel({
       from: 'learner',
       text: trimmed,
     };
-    setMessages((prev) => [...prev, learnerMsg]);
+    const assistantId = `helper-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      learnerMsg,
+      {
+        id: assistantId,
+        from: 'ace',
+        text: '',
+      },
+    ]);
     if (questionOverride == null) setInput('');
     setLoading(true);
 
@@ -111,7 +127,7 @@ export function AceChatPanel({
     }));
 
     try {
-      const res = await fetch('/api/v2/ace/help', {
+      const res = await fetch('/api/v2/dan/help', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,72 +138,79 @@ export function AceChatPanel({
           domain,
           skillId,
           question: trimmed,
-          helperName,
+          helperName: 'Dan',
           learnerName,
           history,
           learnerSlug: learnerSlug ?? undefined,
           inputSource: fromVoice ? 'voice' : 'text',
+          learnerLevel: undefined,
         }),
       });
-      if (!res.ok) {
-        const rawBody = await res.text();
-        let errData: { error?: string } = {};
-        try {
-          errData = rawBody ? (JSON.parse(rawBody) as typeof errData) : {};
-        } catch {
-          /* ignore */
-        }
-        setError(`${helperName} had trouble answering. Try again.`);
-        return;
-      }
-      const rawBody = await res.text();
-      let data: {
-        message?: string;
-        explanation?: string;
-        hints?: string[];
-        example?: string;
-        shouldSpeak?: boolean;
-      } = {};
-      try {
-        data = rawBody ? (JSON.parse(rawBody) as typeof data) : {};
-      } catch {
-        setError(`${helperName} had trouble answering. Try again.`);
-        return;
-      }
-      const message =
-        typeof data.message === 'string' && data.message.length > 0
-          ? data.message
-          : typeof data.explanation === 'string' && data.explanation.length > 0
-            ? data.explanation
-            : '';
-      if (!message) {
-        setError(`${helperName} had trouble answering. Try again.`);
-        return;
-      }
-
-      const parts: string[] = [message];
-      if (Array.isArray(data.hints) && data.hints.length > 0) {
-        parts.push(
-          ['Here are some hints:', ...data.hints.map((h) => `• ${String(h)}`)].join('\n')
+      if (!res.ok || !res.body) {
+        setError('Dan had trouble answering. Please try again.');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  text: "Sorry, I had trouble answering that. Please try again.",
+                }
+              : m
+          )
         );
-      }
-      if (typeof data.example === 'string' && data.example.trim()) {
-        parts.push(`Another example:\n${data.example.trim()}`);
+        return;
       }
 
-      const aceText = parts.join('\n\n');
-      const shouldSpeak = data.shouldSpeak !== false;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let fullText = '';
 
-      const aceMsg: ChatMessage = {
-        id: `helper-${Date.now()}`,
-        from: 'ace',
-        text: aceText,
-      };
-      setMessages((prev) => [...prev, aceMsg]);
-      setLastAceText(aceText);
-      if (shouldSpeak) speak(aceText);
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: !done });
+          if (chunk) {
+            fullText += chunk;
+            const current = fullText;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, text: current } : m))
+            );
+          }
+        }
+      }
+
+      const finalText = fullText.trim();
+      if (!finalText) {
+        setError('Dan had trouble answering. Please try again.');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  text: "Sorry, I had trouble answering that. Please try again.",
+                }
+              : m
+          )
+        );
+        return;
+      }
+
+      setLastAceText(finalText);
+      speak(finalText);
     } catch (e) {
-      setError(`${helperName} had trouble answering. Try again.`);
+      setError('Dan had trouble answering. Please try again.');
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                text: "Sorry, I had trouble answering that. Please try again.",
+              }
+            : m
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -269,7 +292,10 @@ export function AceChatPanel({
               question appears, you can ask for help here.
             </p>
           )}
-          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+          <div
+            ref={messagesEndRef}
+            className="flex max-h-56 flex-col gap-2 overflow-y-auto rounded-xl bg-slate-50 p-2"
+          >
             {messages.map((m) => (
               <AceMessage key={m.id} from={m.from} text={m.text} helperName={helperName} />
             ))}
