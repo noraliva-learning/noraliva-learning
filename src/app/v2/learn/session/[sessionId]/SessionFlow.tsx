@@ -6,10 +6,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { EndSessionButton } from './SessionActions';
 import { SessionQuestion } from './SessionQuestion';
 import { AceChatPanel } from './AceChatPanel';
+import { CompanionElle, CompanionLiv } from '@/components/learner-companions';
+import { JoyfulButton } from '@/components/learner-ui/JoyfulButton';
 
 type Props = {
   sessionId: string;
-  learnerSlug: string;
+  learnerSlug: 'liv' | 'elle';
   learnerId: string;
   learnerName: string;
   domain: string;
@@ -148,15 +150,15 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   if (status === 'loading') {
     const isFirstQuestion = questionsSeenRef.current === 0;
     body = (
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-4">
-        <p className="text-sm font-semibold text-slate-800">
+      <div className="mt-4 rounded-2xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-4 shadow-sm">
+        <p className="text-sm font-semibold text-[rgb(var(--learner-text))]">
           {isFirstQuestion ? 'We are picking your first challenge…' : 'We are finding your next challenge…'}
         </p>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-[rgb(var(--learner-text-muted))]">
           Just a moment while we craft a question that&apos;s just right for your brain.
         </p>
-        <div className="mt-3 flex items-center gap-2 text-xs text-sky-700">
-          <span className="inline-flex h-2 w-2 animate-ping rounded-full bg-sky-500" />
+        <div className="mt-3 flex items-center gap-2 text-xs text-[rgb(var(--learner-progress))]">
+          <span className="inline-flex h-2 w-2 animate-ping rounded-full bg-current" />
           <span>Brain gears turning…</span>
         </div>
       </div>
@@ -164,9 +166,9 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   } else if (status === 'empty') {
     body = (
       <div className="mt-4 space-y-4">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <p className="text-lg font-semibold text-amber-900">Nothing to practice just yet</p>
-          <p className="mt-2 text-slate-700">
+        <div className="rounded-xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-panel))] p-6 text-center">
+          <p className="text-lg font-semibold text-[rgb(var(--learner-text))]">Nothing to practice just yet</p>
+          <p className="mt-2 text-[rgb(var(--learner-text-muted))]">
             We couldn&apos;t find a question for this topic right now. Try another subject or come back soon!
           </p>
         </div>
@@ -177,14 +179,14 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
     body = (
       <div className="mt-4 space-y-4">
         <motion.div
-          className="relative overflow-hidden rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-6 text-center"
+          className="relative overflow-hidden rounded-2xl border-2 border-[rgb(var(--learner-success-strong))] bg-[rgb(var(--learner-celebration))] p-6 text-center"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, type: 'spring', stiffness: 120 }}
         >
-          <p className="text-3xl font-extrabold text-emerald-900">🎉 Mission Complete!</p>
-          <p className="mt-2 text-xl font-semibold text-emerald-800">+25 XP</p>
-          <p className="mt-2 text-base text-slate-800">Your brain just got stronger!</p>
+          <p className="text-3xl font-extrabold text-[rgb(var(--learner-text))]">🎉 Mission Complete!</p>
+          <p className="mt-2 text-xl font-semibold text-[rgb(var(--learner-success-strong))]">+25 XP</p>
+          <p className="mt-2 text-base text-[rgb(var(--learner-text))]">Your brain just got stronger!</p>
 
           <div className="pointer-events-none absolute inset-0">
             <motion.span
@@ -218,30 +220,30 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
     );
   } else if (status === 'feedback' && feedback) {
     body = (
-      <div className="mt-4 rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+      <div className="mt-4 rounded-xl border-2 border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-panel))] p-4">
         {feedback.correct && (
           <motion.div
-            className="mb-4 overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-emerald-100 p-4"
+            className="mb-4 overflow-hidden rounded-xl border border-[rgb(var(--learner-success-strong))] bg-[rgb(var(--learner-success))] p-4"
             initial={{ opacity: 0, y: 12, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.35, type: 'spring', stiffness: 140 }}
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-emerald-900">
+                <p className="text-base font-semibold text-[rgb(var(--learner-text))]">
                   Nice job {learnerName}! ✨
                 </p>
-                <p className="text-sm font-medium text-emerald-800">+10 XP</p>
+                <p className="text-sm font-medium text-[rgb(var(--learner-success-strong))]">+10 XP</p>
               </div>
               <div className="relative h-10 w-10">
                 <motion.span
-                  className="absolute inset-0 rounded-full bg-emerald-400/30"
+                  className="absolute inset-0 rounded-full bg-[rgb(var(--learner-success-strong))]/30"
                   initial={{ scale: 0 }}
                   animate={{ scale: 1.2, opacity: 0 }}
                   transition={{ duration: 0.8, repeat: Infinity, repeatDelay: 0.6 }}
                 />
                 <motion.span
-                  className="absolute inset-1 flex items-center justify-center rounded-full bg-emerald-500 text-lg"
+                  className="absolute inset-1 flex items-center justify-center rounded-full bg-[rgb(var(--learner-progress))] text-lg"
                   initial={{ scale: 0.9 }}
                   animate={{ scale: 1 }}
                   transition={{ duration: 0.3 }}
@@ -253,37 +255,36 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
           </motion.div>
         )}
 
-        <p className="text-lg font-semibold text-slate-900">
+        <p className="text-lg font-semibold text-[rgb(var(--learner-text))]">
           {feedback.correct
             ? (feedback.encouragementMessage ||
                 ['You got it right!', 'You got it!', `Nice work, ${learnerName}!`, "Yes — that's right!"][completedCount % 4])
             : 'Good try! Keep going.'}
         </p>
         {feedback.encouragementMessage && !feedback.correct && (
-          <p className="mt-1 text-slate-700">{feedback.encouragementMessage}</p>
+          <p className="mt-1 text-[rgb(var(--learner-text-muted))]">{feedback.encouragementMessage}</p>
         )}
-        <p className="mt-1 text-sm text-slate-600">You&apos;re at level {feedback.masteryLevel} on this skill.</p>
+        <p className="mt-1 text-sm text-[rgb(var(--learner-text-muted))]">You&apos;re at level {feedback.masteryLevel} on this skill.</p>
         {feedback.microLesson && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="mt-3 rounded-lg border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-3 text-sm text-[rgb(var(--learner-text))]">
             <p className="font-medium">Quick tip</p>
             <p className="mt-1">{feedback.microLesson}</p>
           </div>
         )}
-        <button
-          onClick={handleAdvance}
-          className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          Next question →
-        </button>
+        <div className="mt-4">
+          <JoyfulButton onClick={handleAdvance} variant="primary">
+            Next question →
+          </JoyfulButton>
+        </div>
       </div>
     );
   } else if (exercise && (exercise.exerciseId || exercise.prompt)) {
     body = (
       <>
-        <p className="mt-4 text-sm text-slate-500">
+        <p className="mt-4 text-sm text-[rgb(var(--learner-text-muted))]">
           Question {exercise.index + 1}
         </p>
-        <p className="mt-1 text-sm font-semibold text-slate-700">🧠 Brain Warm-Up!</p>
+        <p className="mt-1 text-sm font-semibold text-[rgb(var(--learner-text))]">🧠 Brain Warm-Up!</p>
         {exercise.exerciseId ? (
           <SessionQuestion
             sessionId={sessionId}
@@ -295,10 +296,11 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
             onResult={handleResult}
             onAnswerChange={setLatestAnswer}
             onAnswerSubmitted={setLatestAnswer}
+            learnerSlug={learnerSlug}
           />
         ) : (
-          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-amber-900">
+          <div className="mt-6 rounded-xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-panel))] p-4">
+            <p className="text-[rgb(var(--learner-text))]">
               This one had a hiccup. Let&apos;s try the next question!
               {(exercise.debugReason || exercise.debugMessage) && (
                 <span data-testid="generate-exercise-debug">
@@ -308,13 +310,11 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
                 </span>
               )}
             </p>
-            <button
-              type="button"
-              onClick={fetchNext}
-              className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              Next question →
-            </button>
+            <div className="mt-3">
+              <JoyfulButton type="button" onClick={fetchNext} variant="primary">
+                Next question →
+              </JoyfulButton>
+            </div>
           </div>
         )}
         <div className="mt-6">
@@ -324,8 +324,8 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
     );
   } else {
     body = (
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-slate-600">No questions in this session. Head back and pick another topic!</p>
+      <div className="mt-4 rounded-xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-4">
+        <p className="text-[rgb(var(--learner-text-muted))]">No questions in this session. Head back and pick another topic!</p>
         <div className="mt-4">
           <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
         </div>
@@ -336,25 +336,30 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const safeCompleted = Math.min(completedCount, missionTarget);
   const progressPercent = Math.max(0, Math.min(100, (safeCompleted / missionTarget) * 100));
 
+  const Companion = learnerSlug === 'elle' ? CompanionElle : CompanionLiv;
+
   return (
     <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Mission Progress
-            </p>
-            <div className="mt-1 h-2 rounded-full bg-slate-100">
+            <div className="flex items-center gap-2">
+              <Companion size={24} className="shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--learner-text-muted))]">
+                Mission Progress
+              </p>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-[rgb(var(--learner-border))]">
               <div
-                className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300 transition-[width] duration-500"
+                className="h-2 rounded-full bg-[rgb(var(--learner-progress))] transition-[width] duration-500 ease-out"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-[rgb(var(--learner-text-muted))]">
               {safeCompleted} / {missionTarget} questions complete
             </p>
           </div>
-          <div className="shrink-0 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
+          <div className="shrink-0 rounded-full bg-[rgb(var(--learner-accent))] px-3 py-1 text-xs font-semibold text-[rgb(var(--learner-text))] shadow-sm">
             🔥 1 Day Streak
           </div>
         </div>

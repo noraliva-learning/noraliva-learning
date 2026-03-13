@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { SessionFlow } from './SessionFlow';
+import { LearnerTheme } from '@/components/learner-theme/LearnerTheme';
 
 type Props = {
   params: Promise<{ sessionId: string }>;
@@ -58,28 +59,30 @@ export default async function SessionPage({ params }: Props) {
   const domainLabel = domainSlug.charAt(0).toUpperCase() + domainSlug.slice(1);
 
   return (
-    <main className="min-h-screen p-6">
-      <header className="mx-auto flex max-w-4xl items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">{domainLabel} practice</h1>
-        <Link
-          href={`/v2/learners/${learnerSlug}`}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        >
-          ← Back to my arcade
-        </Link>
-      </header>
+    <LearnerTheme learnerSlug={learnerSlug}>
+      <main className="min-h-screen p-6">
+        <header className="mx-auto flex max-w-4xl items-center justify-between">
+          <h1 className="text-2xl font-bold text-[rgb(var(--learner-text))]">{domainLabel} practice</h1>
+          <Link
+            href={`/v2/learners/${learnerSlug}`}
+            className="rounded-lg border border-[rgb(var(--learner-border))] px-3 py-1.5 text-sm font-medium text-[rgb(var(--learner-text))] hover:bg-[rgb(var(--learner-bg-subtle))]"
+          >
+            ← Back to my arcade
+          </Link>
+        </header>
 
-      <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-slate-600">Hey {learnerName}, you&apos;re practicing <strong>{domainLabel}</strong>.</p>
+        <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-6 shadow-sm">
+          <p className="text-[rgb(var(--learner-text-muted))]">Hey {learnerName}, you&apos;re practicing <strong className="text-[rgb(var(--learner-text))]">{domainLabel}</strong>.</p>
 
-        <SessionFlow
-          sessionId={sessionId}
-          learnerSlug={learnerSlug}
-          learnerId={session.learner_id}
-          learnerName={learnerName}
-          domain={domainSlug}
-        />
-      </div>
-    </main>
+          <SessionFlow
+            sessionId={sessionId}
+            learnerSlug={learnerSlug}
+            learnerId={session.learner_id}
+            learnerName={learnerName}
+            domain={domainSlug}
+          />
+        </div>
+      </main>
+    </LearnerTheme>
   );
 }

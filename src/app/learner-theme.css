@@ -1,0 +1,61 @@
+/* Learner-specific theme variables. Apply to a wrapper with data-learner="elle" or data-learner="liv". */
+
+/* Elle: soft pastels, clouds, rainbows, unicorns, dreamy magic */
+[data-learner="elle"] {
+  --learner-bg: 250 248 255; /* lavender blush / very soft */
+  --learner-bg-subtle: 255 250 255; /* floral white */
+  --learner-surface: 255 255 255;
+  --learner-border: 230 220 240;
+  --learner-text: 70 50 90;
+  --learner-text-muted: 120 100 140;
+  --learner-cta: 220 160 220; /* soft violet */
+  --learner-cta-hover: 200 140 200;
+  --learner-cta-text: 255 255 255;
+  --learner-accent: 255 182 193; /* light pink */
+  --learner-success: 180 220 200;
+  --learner-success-strong: 120 180 150;
+  --learner-celebration: 255 218 235;
+  --learner-card: 255 253 255;
+  --learner-progress: 200 170 220;
+  --learner-panel: 252 248 255;
+}
+
+/* Liv: bolder, adventurous dinosaur explorer, prehistoric discovery */
+[data-learner="liv"] {
+  --learner-bg: 245 248 242; /* soft sage / prehistoric feel */
+  --learner-bg-subtle: 238 245 232;
+  --learner-surface: 255 255 255;
+  --learner-border: 200 210 185;
+  --learner-text: 45 55 40;
+  --learner-text-muted: 80 95 70;
+  --learner-cta: 80 140 90; /* forest / explorer green */
+  --learner-cta-hover: 60 120 75;
+  --learner-cta-text: 255 255 255;
+  --learner-accent: 160 180 120; /* olive/sage */
+  --learner-success: 180 210 160;
+  --learner-success-strong: 100 160 110;
+  --learner-celebration: 200 220 180;
+  --learner-card: 252 253 250;
+  --learner-progress: 100 150 110;
+  --learner-panel: 248 252 245;
+}
+
+/* Fallback when no data-learner (e.g. parent dashboard) — keep neutral */
+:root {
+  --learner-bg: 248 250 252;
+  --learner-bg-subtle: 241 245 249;
+  --learner-surface: 255 255 255;
+  --learner-border: 226 232 240;
+  --learner-text: 15 23 42;
+  --learner-text-muted: 100 116 139;
+  --learner-cta: 16 185 129;
+  --learner-cta-hover: 5 150 105;
+  --learner-cta-text: 255 255 255;
+  --learner-accent: 134 239 172;
+  --learner-success: 209 250 229;
+  --learner-success-strong: 52 211 153;
+  --learner-celebration: 236 253 245;
+  --learner-card: 255 255 255;
+  --learner-progress: 52 211 153;
+  --learner-panel: 248 250 252;
+}

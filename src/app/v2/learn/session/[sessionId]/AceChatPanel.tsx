@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { AceInput } from './AceInput';
 import { AceMessage } from './AceMessage';
 
@@ -272,29 +273,31 @@ export function AceChatPanel({
   }
 
   return (
-    <div className="mt-4 w-full max-w-xs rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:mt-0 lg:w-80">
-      <button
+    <div className="mt-4 w-full max-w-xs rounded-2xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-panel))] p-3 shadow-sm lg:mt-0 lg:w-80">
+      <motion.button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+        className="flex w-full items-center justify-between rounded-xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] px-3 py-2 text-xs font-semibold text-[rgb(var(--learner-text))] hover:bg-[rgb(var(--learner-bg-subtle))]"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
       >
         <span>💬 Ask {helperName}</span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">
+        <span className="text-[10px] uppercase tracking-wide text-[rgb(var(--learner-text-muted))]">
           {isOpen ? 'Hide' : 'Show'}
         </span>
-      </button>
+      </motion.button>
 
       {isOpen && (
         <div className="mt-3 flex flex-col gap-2">
           {!hasExerciseContext && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="rounded-lg bg-[rgb(var(--learner-card))] px-3 py-2 text-xs text-[rgb(var(--learner-text))] border border-[rgb(var(--learner-border))]">
               {helperName} will use the current question and your answer to help you. Once a
               question appears, you can ask for help here.
             </p>
           )}
           <div
             ref={messagesEndRef}
-            className="flex max-h-56 flex-col gap-2 overflow-y-auto rounded-xl bg-slate-50 p-2"
+            className="flex max-h-56 flex-col gap-2 overflow-y-auto rounded-xl bg-[rgb(var(--learner-card))] p-2 border border-[rgb(var(--learner-border))]"
           >
             {messages.map((m) => (
               <AceMessage key={m.id} from={m.from} text={m.text} helperName={helperName} />
@@ -306,19 +309,20 @@ export function AceChatPanel({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <motion.button
               type="button"
               onClick={handleMicClick}
               className={`flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold shadow-sm ${
                 listening
                   ? 'bg-rose-500 text-white animate-pulse'
-                  : 'bg-sky-600 text-white hover:bg-sky-700'
+                  : 'bg-[rgb(var(--learner-cta))] text-[rgb(var(--learner-cta-text))] hover:bg-[rgb(var(--learner-cta-hover))]'
               }`}
               aria-label={`Ask ${helperName} with your voice`}
+              whileTap={{ scale: 0.96 }}
             >
               <span className="mr-1 text-sm">🎤</span>
               <span>Ask {helperName}</span>
-            </button>
+            </motion.button>
             <div className="flex-1">
               <AceInput
               value={input}
@@ -328,15 +332,16 @@ export function AceChatPanel({
               helperName={helperName}
             />
             </div>
-            <button
+            <motion.button
               type="button"
               onClick={handleReplay}
               disabled={!lastAceText}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[rgb(var(--learner-card))] text-[rgb(var(--learner-text))] hover:bg-[rgb(var(--learner-accent))] disabled:opacity-40 border border-[rgb(var(--learner-border))]"
               aria-label="Replay the last answer"
+              whileTap={{ scale: 0.9 }}
             >
               🔊
-            </button>
+            </motion.button>
           </div>
           {listening && (
             <p className="text-[11px] text-sky-700">

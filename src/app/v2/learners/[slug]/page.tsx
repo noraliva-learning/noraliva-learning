@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getUserAppRole, getDashboardPath } from "@/lib/auth/getUserAppRole";
 import { startLearningSession } from "@/lib/db/startSession";
+import { LearnerTheme } from "@/components/learner-theme/LearnerTheme";
+import { CompanionElle, CompanionLiv } from "@/components/learner-companions";
+import { JoyfulButton } from "@/components/learner-ui/JoyfulButton";
 
 const DOMAINS = [
   { id: "math", label: "Math" },
@@ -80,54 +83,61 @@ export default function V2LearnerDashboardPage() {
   }
 
   const name = slug === "liv" ? "Liv" : "Elle";
+  const Companion = slug === "elle" ? CompanionElle : CompanionLiv;
 
   return (
-    <main className="min-h-screen p-6">
-      <header className="mx-auto flex max-w-4xl items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Hi, {name}!</h1>
-        <button
-          onClick={handleSignOut}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        >
-          Sign out
-        </button>
-      </header>
-
-      <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-slate-600">Choose what you want to practice today.</p>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {DOMAINS.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => handleStartSession(d.id)}
-              disabled={startingDomain !== null}
-              className="rounded-xl border-2 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md hover:bg-emerald-50/50 disabled:opacity-60"
-            >
-              <div className="font-semibold text-slate-900">{d.label}</div>
-              <div className="mt-1 text-sm text-slate-600">
-                {startingDomain === d.id ? "Starting…" : "Tap to start →"}
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-6 flex flex-wrap gap-3">
+    <LearnerTheme learnerSlug={slug}>
+      <main className="min-h-screen p-6">
+        <header className="mx-auto flex max-w-4xl items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Companion size={36} className="shrink-0" />
+            <h1 className="text-2xl font-bold text-[rgb(var(--learner-text))]">Hi, {name}!</h1>
+          </div>
           <button
-            type="button"
-            onClick={() => handleStartSession("math")}
-            disabled={startingDomain !== null}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            onClick={handleSignOut}
+            className="rounded-lg border border-[rgb(var(--learner-border))] px-3 py-1.5 text-sm font-medium text-[rgb(var(--learner-text))] hover:bg-[rgb(var(--learner-bg-subtle))]"
           >
-            {startingDomain === "math" ? "Starting…" : "Quick start: Math"}
+            Sign out
           </button>
-          <Link
-            href="/"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Back to home
-          </Link>
+        </header>
+
+        <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-6 shadow-sm">
+          <p className="text-[rgb(var(--learner-text-muted))]">Choose what you want to practice today.</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {DOMAINS.map((d) => (
+              <JoyfulButton
+                key={d.id}
+                type="button"
+                onClick={() => handleStartSession(d.id)}
+                disabled={startingDomain !== null}
+                variant="secondary"
+                className="w-full rounded-xl p-4 text-left"
+              >
+                <div className="font-semibold">{d.label}</div>
+                <div className="mt-1 text-sm opacity-90">
+                  {startingDomain === d.id ? "Starting…" : "Tap to start →"}
+                </div>
+              </JoyfulButton>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <JoyfulButton
+              type="button"
+              onClick={() => handleStartSession("math")}
+              disabled={startingDomain !== null}
+              variant="primary"
+            >
+              {startingDomain === "math" ? "Starting…" : "Quick start: Math"}
+            </JoyfulButton>
+            <Link
+              href="/"
+              className="rounded-lg border border-[rgb(var(--learner-border))] px-4 py-2 text-sm font-semibold text-[rgb(var(--learner-text))] hover:bg-[rgb(var(--learner-bg-subtle))]"
+            >
+              Back to home
+            </Link>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </LearnerTheme>
   );
 }

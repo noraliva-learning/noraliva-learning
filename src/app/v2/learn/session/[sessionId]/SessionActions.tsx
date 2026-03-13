@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { endLearningSession } from '@/lib/db/endSession';
+import { JoyfulButton } from '@/components/learner-ui/JoyfulButton';
 
 type Props = {
   sessionId: string;
@@ -25,12 +26,13 @@ export function EndSessionButton({ sessionId, learnerSlug }: Props) {
   }
 
   return (
-    <button
+    <JoyfulButton
       onClick={handleEndSession}
       disabled={loading}
-      className="rounded-xl bg-rose-600 px-6 py-3 text-lg font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+      variant="danger"
+      className="rounded-xl px-6 py-3 text-lg"
     >
       {loading ? 'Ending…' : 'Done for now — back to my arcade'}
-    </button>
+    </JoyfulButton>
   );
 }

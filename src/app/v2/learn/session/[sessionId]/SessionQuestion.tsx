@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { speak, stopSpeaking } from '@/lib/speech';
+import { shouldAutoReadAloud } from '@/lib/learner-theme';
+import { JoyfulButton } from '@/components/learner-ui/JoyfulButton';
 
 type Feedback = {
   correct: boolean;
@@ -21,6 +24,7 @@ type Props = {
   onResult: (f: Feedback) => void;
   onAnswerChange?: (value: string) => void;
   onAnswerSubmitted?: (value: string) => void;
+  learnerSlug?: 'liv' | 'elle';
 };
 
 export function SessionQuestion({
@@ -33,11 +37,53 @@ export function SessionQuestion({
   onResult,
   onAnswerChange,
   onAnswerSubmitted,
+  learnerSlug = 'liv',
 }: Props) {
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hintIndex, setHintIndex] = useState(-1);
+  const [speechUnavailable, setSpeechUnavailable] = useState(false);
+  const promptSpokenRef = useRef(false);
+
+  const autoRead = shouldAutoReadAloud(learnerSlug);
+
+  useEffect(() => {
+    if (!prompt?.trim()) return;
+    promptSpokenRef.current = false;
+    if (!autoRead) return;
+
+    const timer = setTimeout(() => {
+      if (typeof window === 'undefined' || !window.speechSynthesis) {
+        setSpeechUnavailable(true);
+        return;
+      }
+      try {
+        stopSpeaking();
+        speak(prompt, { rate: 0.9, pitch: 1.1 });
+        promptSpokenRef.current = true;
+      } catch {
+        setSpeechUnavailable(true);
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      stopSpeaking();
+    };
+  }, [prompt, autoRead]);
+
+  function handleReplayQuestion() {
+    if (!prompt?.trim()) return;
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        stopSpeaking();
+        speak(prompt, { rate: 0.9, pitch: 1.1 });
+      } catch {
+        setSpeechUnavailable(true);
+      }
+    }
+  }
 
   async function handleSubmit() {
     const trimmed = answer.trim();
@@ -83,9 +129,20 @@ export function SessionQuestion({
   }
 
   return (
-    <div className="mt-6 rounded-xl border-2 border-slate-200 bg-white p-4">
-      <p className="font-medium text-slate-900">{prompt}</p>
-      <p className="mt-2 text-sm text-slate-600">
+    <div className="mt-6 rounded-xl border-2 border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-card))] p-4 shadow-sm">
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 font-medium text-[rgb(var(--learner-text))]">{prompt}</p>
+        <button
+          type="button"
+          onClick={handleReplayQuestion}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--learner-panel))] text-[rgb(var(--learner-text-muted))] hover:bg-[rgb(var(--learner-accent))] hover:text-[rgb(var(--learner-text))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--learner-cta))]"
+          aria-label="Read question again"
+          title="Read question again"
+        >
+          <span aria-hidden>🔊</span>
+        </button>
+      </div>
+      <p className="mt-2 text-sm text-[rgb(var(--learner-text-muted))]">
         Your turn! Type your answer below and we&apos;ll check it together.
       </p>
       <div className="mt-3 flex flex-col gap-3">
@@ -99,7 +156,7 @@ export function SessionQuestion({
               onAnswerChange?.(value);
             }}
             placeholder="Type your choice"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+            className="rounded-lg border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-surface))] px-3 py-2 text-[rgb(var(--learner-text))] placeholder:text-[rgb(var(--learner-text-muted))]"
             disabled={loading}
           />
         ) : (
@@ -113,21 +170,21 @@ export function SessionQuestion({
               onAnswerChange?.(value);
             }}
             placeholder={answerType === 'number' ? 'Enter a number' : 'Type your answer'}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+            className="rounded-lg border border-[rgb(var(--learner-border))] bg-[rgb(var(--learner-surface))] px-3 py-2 text-[rgb(var(--learner-text))] placeholder:text-[rgb(var(--learner-text-muted))]"
             disabled={loading}
           />
         )}
-        <button
+        <JoyfulButton
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          variant="primary"
         >
           {loading ? 'Checking your answer…' : 'Check my answer'}
-        </button>
+        </JoyfulButton>
       </div>
       {loading && (
-        <div className="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        <div className="mt-3 rounded-lg bg-[rgb(var(--learner-panel))] px-3 py-2 text-xs text-[rgb(var(--learner-text-muted))]">
           <p>We&apos;re comparing your answer with the goal.</p>
           <p className="mt-0.5">This usually takes just a moment.</p>
         </div>
@@ -137,7 +194,7 @@ export function SessionQuestion({
           <button
             type="button"
             onClick={() => setHintIndex((i) => (i < hints.length - 1 ? i + 1 : i))}
-            className="text-sm text-slate-500 underline hover:text-slate-700"
+            className="text-sm text-[rgb(var(--learner-text-muted))] underline hover:text-[rgb(var(--learner-text))]"
           >
             {hintIndex < 0 ? 'Show hint' : hintIndex < hints.length - 1 ? 'Show another hint' : 'Hints'}
           </button>
