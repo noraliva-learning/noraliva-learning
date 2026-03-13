@@ -7,17 +7,14 @@ const MAX_TOKENS = 1024;
 const TEMPERATURE = 0.6;
 
 const SYSTEM_PROMPT = `You are an elite adaptive tutor for a child learner.
-Generate ONE learning exercise that sits at the edge of the learner's ability.
+Generate ONE learning exercise that sits at the edge of this specific learner's ability.
 
 Rules:
-- age appropriate
-- concise
-- single clear objective
-- increasing difficulty gradually
-- avoid repetition
-- adapt to mastery level
-- encourage reasoning
-- Content must be child-safe: no violence, no inappropriate topics, only educational material.
+- Use the learner's age and grade to set difficulty and wording (e.g. age 5 / Grade 1 = simpler numbers and language; age 7 / Grade 2 = slightly harder).
+- Concise, single clear objective, child-safe content only.
+- ADAPT based on the "Last attempt" and "Adaptation" instructions in the user message: if last was correct → slightly harder or next step; if last was incorrect → easier or same skill with more scaffolding; if misconception noted → target that misconception.
+- Do NOT repeat any prompt listed in "Do not repeat these exact prompts".
+- Encourage reasoning. No violence or inappropriate topics.
 
 Return JSON only, no markdown or explanation outside the JSON:
 {
@@ -70,16 +67,31 @@ function parseGeneratedExercise(text: string): GeneratedExercise | null {
   return null;
 }
 
-function getFallbackMathExercise(): GeneratedExercise {
-  const a = Math.floor(Math.random() * 5) + 1;
-  const b = Math.floor(Math.random() * 5) + 1;
+/** Learner-aware fallback: number range by age; avoid repeating prompts from this session. */
+function getFallbackMathExercise(ctx?: {
+  age?: number;
+  recentPromptsInSession?: string[];
+}): GeneratedExercise {
+  const age = ctx?.age ?? 6;
+  const maxN = age <= 5 ? 5 : age <= 7 ? 8 : 12;
+  const seen = new Set((ctx?.recentPromptsInSession ?? []).map((p) => p.trim()));
+  let a: number, b: number;
+  let tries = 0;
+  const maxTries = 25;
+  do {
+    a = Math.floor(Math.random() * maxN) + 1;
+    b = Math.floor(Math.random() * maxN) + 1;
+    const prompt = `What is ${a} + ${b}?`;
+    if (!seen.has(prompt)) break;
+    tries++;
+  } while (tries < maxTries);
   return {
     prompt: `What is ${a} + ${b}?`,
     answer_type: 'number',
     correct_answer: String(a + b),
     hints: ['Count on your fingers.', 'Add the first number, then count up.'],
     skill_focus: 'addition',
-    difficulty_estimate: 0.3,
+    difficulty_estimate: age <= 5 ? 0.25 : age <= 7 ? 0.35 : 0.45,
   };
 }
 
@@ -126,7 +138,7 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey?.trim()) {
-      const fallback = getFallbackMathExercise();
+      const fallback = getFallbackMathExercise({ age: ctx.age, recentPromptsInSession: ctx.recentPromptsInSession });
       const lessonId = await getOrCreateLessonForSkill(supabase, ctx.skillId);
       if (lessonId) {
         const { data: ex } = await supabase
@@ -160,7 +172,28 @@ export async function POST(request: Request) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const userMessage = `Domain: ${ctx.domain}. Skill: ${ctx.skillName} (${ctx.skillSlug}). Mastery level (0-5): ${ctx.masteryLevel}. Mastery probability: ${ctx.masteryProbability}. Recent performance (last ${ctx.recentPerformance.length}): ${ctx.recentPerformance.map((p) => (p.correct ? 'correct' : 'incorrect')).join(', ') || 'none'}. Recent misconceptions: ${ctx.misconceptions.join(', ') || 'none'}. Generate one exercise.`;
+    const adaptation =
+      ctx.lastAttemptInSession == null
+        ? 'This is the first question in this session; choose difficulty appropriate to the learner\'s age and mastery.'
+        : ctx.lastAttemptInSession.correct
+          ? 'Last attempt was CORRECT. Generate a slightly harder or next-step exercise (same or adjacent skill).'
+          : 'Last attempt was INCORRECT. Generate an easier exercise or the same skill with more scaffolding. If the learner has repeated misconceptions listed below, target remediation for that misconception.';
+    const noRepeat =
+      ctx.recentPromptsInSession.length > 0
+        ? `Do not repeat these exact prompts: ${ctx.recentPromptsInSession.slice(0, 15).join(' | ')}`
+        : '';
+    const userMessage = [
+      `Learner: age ${ctx.age}, ${ctx.gradeLabel}.`,
+      `Domain: ${ctx.domain}. Skill: ${ctx.skillName} (${ctx.skillSlug}).`,
+      `Mastery level (0-5): ${ctx.masteryLevel}. Mastery probability: ${ctx.masteryProbability}.`,
+      `Recent performance (last ${ctx.recentPerformance.length}): ${ctx.recentPerformance.map((p) => (p.correct ? 'correct' : 'incorrect')).join(', ') || 'none'}.`,
+      `Recent misconceptions: ${ctx.misconceptions.join(', ') || 'none'}.`,
+      `Adaptation: ${adaptation}`,
+      noRepeat,
+      'Generate one exercise.',
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -174,7 +207,7 @@ export async function POST(request: Request) {
 
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
-      const fallback = getFallbackMathExercise();
+      const fallback = getFallbackMathExercise({ age: ctx.age, recentPromptsInSession: ctx.recentPromptsInSession });
       const lessonId = await getOrCreateLessonForSkill(supabase, ctx.skillId);
       let exerciseId: string | null = null;
       if (lessonId) {
@@ -201,7 +234,7 @@ export async function POST(request: Request) {
 
     const exercise = parseGeneratedExercise(raw);
     if (!exercise) {
-      const fallback = getFallbackMathExercise();
+      const fallback = getFallbackMathExercise({ age: ctx.age, recentPromptsInSession: ctx.recentPromptsInSession });
       const lessonId = await getOrCreateLessonForSkill(supabase, ctx.skillId);
       let exerciseId: string | null = null;
       if (lessonId) {
@@ -248,7 +281,7 @@ export async function POST(request: Request) {
     if (insertError || !ex?.id) {
       const msg = `[generate-exercise] exercises insert failed: ${insertError?.message ?? insertError} code: ${insertError?.code ?? 'n/a'}`;
       console.error(msg);
-      const fallback = getFallbackMathExercise();
+      const fallback = getFallbackMathExercise({ age: ctx.age, recentPromptsInSession: ctx.recentPromptsInSession });
       return NextResponse.json({
         ...fallback,
         exerciseId: null,
@@ -272,13 +305,14 @@ export async function POST(request: Request) {
       fallback: false,
     });
   } catch (e) {
-    const fallback = getFallbackMathExercise();
     const sessionId = body?.sessionId && typeof body.sessionId === 'string' ? body.sessionId : null;
+    let fallback = getFallbackMathExercise();
     if (sessionId) {
       try {
         const supabase = await createClient();
         const ctx = await getLearnerContextForGeneration(supabase, sessionId);
         if (ctx) {
+          fallback = getFallbackMathExercise({ age: ctx.age, recentPromptsInSession: ctx.recentPromptsInSession });
           const lessonId = await getOrCreateLessonForSkill(supabase, ctx.skillId);
           if (lessonId) {
             const { data: ex } = await supabase

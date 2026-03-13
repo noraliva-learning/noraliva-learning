@@ -1,14 +1,19 @@
 /**
  * Load learner context for AI exercise generation: skills in domain,
- * mastery, recent performance, and misconceptions.
+ * mastery, recent performance, misconceptions, learner profile (age/grade),
+ * last attempt in this session, recent prompts in session, and due-review skills.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { edgeOfLearningScore } from '@/lib/mastery/masteryEngine';
 import { getRecentMisconceptionCounts } from '@/lib/db/misconceptions';
+import { getLearnerProfile } from '@/lib/learners';
 
 export type LearnerContextForAI = {
   learnerId: string;
+  learnerSlug: string;
+  age: number;
+  gradeLabel: string;
   domain: string;
   skillId: string;
   skillSlug: string;
@@ -18,6 +23,12 @@ export type LearnerContextForAI = {
   confidenceScore: number;
   recentPerformance: { correct: boolean }[];
   misconceptions: string[];
+  /** Last attempt in this session (so we can adapt: correct → harder, incorrect → easier) */
+  lastAttemptInSession: { correct: boolean; skillId: string } | null;
+  /** Prompts already shown this session — do not repeat */
+  recentPromptsInSession: string[];
+  /** Skills due for review (next_review_at <= now) */
+  dueReviewSkillIds: string[];
 };
 
 export async function getLearnerContextForGeneration(
@@ -33,6 +44,16 @@ export async function getLearnerContextForGeneration(
   if (sessionError || !session) return null;
   const learnerId = session.learner_id;
   const domain = session.domain as string;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, age, grade_label')
+    .eq('id', learnerId)
+    .maybeSingle();
+  const learnerSlug = (profile?.role === 'liv' || profile?.role === 'elle' ? profile.role : 'liv') as string;
+  const profileLearner = getLearnerProfile(learnerSlug);
+  const age = profile?.age ?? profileLearner.age;
+  const gradeLabel = (profile?.grade_label?.trim() || profileLearner.gradeLabel) as string;
 
   const { data: domainRow } = await supabase
     .from('domains')
@@ -84,6 +105,13 @@ export async function getLearnerContextForGeneration(
     ])
   );
 
+  const now = new Date().toISOString();
+  const dueReviewSkillIds = skillIds.filter((id) => {
+    const m = masteryBySkill.get(id);
+    const nextReview = (m as { next_review_at?: string | null })?.next_review_at;
+    return nextReview && nextReview <= now;
+  });
+
   let skillId: string;
   let skillSlug: string;
   let skillName: string;
@@ -92,6 +120,17 @@ export async function getLearnerContextForGeneration(
     skillId = s.id;
     skillSlug = s.slug;
     skillName = s.name;
+  } else if (dueReviewSkillIds.length > 0) {
+    const dueSkills = skills.filter((s) => dueReviewSkillIds.includes(s.id));
+    dueSkills.sort((a, b) => {
+      const probA = masteryBySkill.get(a.id)?.mastery_probability ?? 0.3;
+      const probB = masteryBySkill.get(b.id)?.mastery_probability ?? 0.3;
+      return probA - probB;
+    });
+    const chosen = dueSkills[0] ?? skills[0];
+    skillId = chosen.id;
+    skillSlug = chosen.slug;
+    skillName = chosen.name;
   } else {
     const scores = skills.map((s) => {
       const m = masteryBySkill.get(s.id);
@@ -135,8 +174,50 @@ export async function getLearnerContextForGeneration(
   });
   const misconceptions = misconceptionCounts.map((c) => c.tag);
 
+  const { data: sessionAttempts } = await supabase
+    .from('attempts')
+    .select('exercise_id, correct')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  const sessionAttemptRows = sessionAttempts ?? [];
+
+  let lastAttemptInSession: { correct: boolean; skillId: string } | null = null;
+  if (sessionAttemptRows.length > 0) {
+    const first = sessionAttemptRows[0];
+    const { data: ex } = await supabase
+      .from('exercises')
+      .select('lesson_id')
+      .eq('id', first.exercise_id)
+      .single();
+    if (ex?.lesson_id) {
+      const { data: lesson } = await supabase
+        .from('lessons')
+        .select('skill_id')
+        .eq('id', ex.lesson_id)
+        .single();
+      const lastSkillId = (lesson as { skill_id?: string } | null)?.skill_id ?? skillId;
+      lastAttemptInSession = { correct: first.correct, skillId: lastSkillId };
+    } else {
+      lastAttemptInSession = { correct: first.correct, skillId };
+    }
+  }
+
+  const exerciseIdsInSession = [...new Set(sessionAttemptRows.map((a) => a.exercise_id))];
+  let recentPromptsInSession: string[] = [];
+  if (exerciseIdsInSession.length > 0) {
+    const { data: exPrompts } = await supabase
+      .from('exercises')
+      .select('id, prompt')
+      .in('id', exerciseIdsInSession);
+    recentPromptsInSession = (exPrompts ?? []).map((e) => (e as { prompt?: string }).prompt ?? '').filter(Boolean);
+  }
+
   return {
     learnerId,
+    learnerSlug,
+    age,
+    gradeLabel,
     domain,
     skillId,
     skillSlug,
@@ -146,6 +227,9 @@ export async function getLearnerContextForGeneration(
     confidenceScore,
     recentPerformance: recentPerformanceMapped,
     misconceptions,
+    lastAttemptInSession,
+    recentPromptsInSession,
+    dueReviewSkillIds,
   };
 }
 
