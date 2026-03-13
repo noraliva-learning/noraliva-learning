@@ -172,12 +172,36 @@ export async function POST(request: Request) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const adaptation =
-      ctx.lastAttemptInSession == null
-        ? 'This is the first question in this session; choose difficulty appropriate to the learner\'s age and mastery.'
-        : ctx.lastAttemptInSession.correct
-          ? 'Last attempt was CORRECT. Generate a slightly harder or next-step exercise (same or adjacent skill).'
-          : 'Last attempt was INCORRECT. Generate an easier exercise or the same skill with more scaffolding. If the learner has repeated misconceptions listed below, target remediation for that misconception.';
+
+    const isElle = ctx.learnerSlug === 'elle';
+    const learnerTone = isElle
+      ? 'Elle is a very young learner (around age 5 / Grade 1). Prioritize comfort and confidence over challenge. Use very small numbers, concrete language, and gentle, playful contexts. When in doubt, choose easier.'
+      : 'This learner is similar to Liv (around age 7 / Grade 2). You can be gently adventurous, but comfort and confidence still come first.';
+
+    const qCount = ctx.sessionQuestionCount ?? 0;
+    const correctStreak = ctx.sessionCorrectStreak ?? 0;
+    const incorrectStreak = ctx.sessionIncorrectStreak ?? 0;
+
+    let adaptation: string;
+    if (qCount < 3) {
+      adaptation =
+        `This is question ${qCount + 1} in a NEW session. It must be an EASY-WIN warm-up, clearly below the learner's estimated ability. ` +
+        'Use very easy numbers and patterns and keep the same general difficulty for the first three questions, even if answers are correct.';
+    } else if (incorrectStreak >= 2) {
+      adaptation =
+        'The learner has 2 or more INCORRECT answers in a row. Step difficulty DOWN and stay at this easier level for AT LEAST the next 3 questions. ' +
+        'Stay on the SAME SKILL with easier numbers and much more scaffolding (step-by-step hints, decomposing the problem). ' +
+        'Do NOT jump difficulty back up after a single correct answer.';
+    } else if (correctStreak >= 3) {
+      adaptation =
+        'The learner has 3 or more CORRECT answers in a row at the current level. Gently step difficulty UP within the SAME SKILL: ' +
+        'slightly larger numbers or one extra simple step, but still target about 80% success. Do not introduce brand-new concepts yet.';
+    } else {
+      adaptation =
+        'Keep the difficulty level STABLE at the current level. Stay on the SAME SKILL with small variations (different numbers, slightly different wording). ' +
+        'Avoid up/down oscillation; do not swing difficulty after a single answer. Aim for the learner to be correct most of the time (around 80% success).';
+    }
+
     const noRepeat =
       ctx.recentPromptsInSession.length > 0
         ? `Do not repeat these exact prompts: ${ctx.recentPromptsInSession.slice(0, 15).join(' | ')}`
@@ -188,7 +212,8 @@ export async function POST(request: Request) {
       `Mastery level (0-5): ${ctx.masteryLevel}. Mastery probability: ${ctx.masteryProbability}.`,
       `Recent performance (last ${ctx.recentPerformance.length}): ${ctx.recentPerformance.map((p) => (p.correct ? 'correct' : 'incorrect')).join(', ') || 'none'}.`,
       `Recent misconceptions: ${ctx.misconceptions.join(', ') || 'none'}.`,
-      `Adaptation: ${adaptation}`,
+      learnerTone,
+      `Adaptation policy (child-safe): ${adaptation}`,
       noRepeat,
       'Generate one exercise.',
     ]

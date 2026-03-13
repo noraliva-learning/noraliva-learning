@@ -29,6 +29,12 @@ export type LearnerContextForAI = {
   recentPromptsInSession: string[];
   /** Skills due for review (next_review_at <= now) */
   dueReviewSkillIds: string[];
+  /** Number of questions attempted so far in this session. */
+  sessionQuestionCount: number;
+  /** Streak of correct answers at the END of the session (most recent backwards). */
+  sessionCorrectStreak: number;
+  /** Streak of incorrect answers at the END of the session (most recent backwards). */
+  sessionIncorrectStreak: number;
 };
 
 export async function getLearnerContextForGeneration(
@@ -182,6 +188,19 @@ export async function getLearnerContextForGeneration(
     .limit(20);
   const sessionAttemptRows = sessionAttempts ?? [];
 
+  const sessionQuestionCount = sessionAttemptRows.length;
+  let sessionCorrectStreak = 0;
+  let sessionIncorrectStreak = 0;
+  for (const row of sessionAttemptRows) {
+    if (row.correct) {
+      if (sessionIncorrectStreak > 0) break;
+      sessionCorrectStreak += 1;
+    } else {
+      if (sessionCorrectStreak > 0) break;
+      sessionIncorrectStreak += 1;
+    }
+  }
+
   let lastAttemptInSession: { correct: boolean; skillId: string } | null = null;
   if (sessionAttemptRows.length > 0) {
     const first = sessionAttemptRows[0];
@@ -230,6 +249,9 @@ export async function getLearnerContextForGeneration(
     lastAttemptInSession,
     recentPromptsInSession,
     dueReviewSkillIds,
+    sessionQuestionCount,
+    sessionCorrectStreak,
+    sessionIncorrectStreak,
   };
 }
 
