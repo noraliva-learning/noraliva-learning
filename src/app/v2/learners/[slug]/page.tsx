@@ -31,6 +31,7 @@ export default function V2LearnerDashboardPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [startingDomain, setStartingDomain] = useState<string | null>(null);
+  const [startingLesson, setStartingLesson] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -71,6 +72,29 @@ export default function V2LearnerDashboardPage() {
     } catch (e) {
       console.error(e);
       setStartingDomain(null);
+    }
+  }
+
+  async function handleStartAceLesson(domain: "math" | "reading") {
+    if (!isSlug(slug)) return;
+    setStartingLesson(true);
+    try {
+      const res = await fetch("/api/v2/instruction/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain, learnerSlug: slug }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || res.statusText);
+      }
+      const data = await res.json();
+      const episodeId = data.episodeId;
+      if (episodeId) router.push(`/v2/learn/lesson/${episodeId}`);
+      else setStartingLesson(false);
+    } catch (e) {
+      console.error(e);
+      setStartingLesson(false);
     }
   }
 
@@ -123,11 +147,27 @@ export default function V2LearnerDashboardPage() {
           <div className="mt-6 flex flex-wrap gap-3">
             <JoyfulButton
               type="button"
-              onClick={() => handleStartSession("math")}
-              disabled={startingDomain !== null}
+              onClick={() => handleStartAceLesson("math")}
+              disabled={startingLesson || startingDomain !== null}
               variant="primary"
             >
-              {startingDomain === "math" ? "Starting…" : "Quick start: Math"}
+              {startingLesson ? "Starting lesson…" : "Ace Lesson: Math"}
+            </JoyfulButton>
+            <JoyfulButton
+              type="button"
+              onClick={() => handleStartAceLesson("reading")}
+              disabled={startingLesson || startingDomain !== null}
+              variant="primary"
+            >
+              {startingLesson ? "Starting lesson…" : "Ace Lesson: Reading"}
+            </JoyfulButton>
+            <JoyfulButton
+              type="button"
+              onClick={() => handleStartSession("math")}
+              disabled={startingDomain !== null || startingLesson}
+              variant="secondary"
+            >
+              {startingDomain === "math" ? "Starting…" : "Practice (quiz): Math"}
             </JoyfulButton>
             <Link
               href="/"

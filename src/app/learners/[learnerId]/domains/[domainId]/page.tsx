@@ -209,6 +209,8 @@ export default function DomainPage({ params }: { params: Params }) {
     if (!body || aceBodyRef.current === body) return;
     aceBodyRef.current = body;
     speak(body);
+    // aceResponse is a function that reads current state; omitting to avoid effect churn
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAce, aceMode, lastMistakes, currentQuestion?.prompt]);
 
   function openAce(payload: NonNullable<typeof aceMode>) {

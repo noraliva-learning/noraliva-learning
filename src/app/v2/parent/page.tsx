@@ -87,6 +87,12 @@ export default function V2ParentDashboardPage() {
             Go to Learn session
           </Link>
           <Link
+            href="/v2/parent/insight"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Learning insight
+          </Link>
+          <Link
             href="/v2/parent/transcript"
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
