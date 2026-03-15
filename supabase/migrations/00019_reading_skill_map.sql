@@ -10,13 +10,13 @@ SELECT v.id, d.id, u.id, v.slug, v.name, v.sort_order
 FROM public.domains d
 JOIN public.units u ON u.domain_id = d.id AND u.slug = 'foundations'
 CROSS JOIN (VALUES
-  ('r0000001-0001-4000-8000-000000000001'::uuid, 'letter-recognition', 'Letter recognition', 0),
-  ('r0000002-0001-4000-8000-000000000002'::uuid, 'letter-sounds', 'Letter sounds', 1),
-  ('r0000003-0001-4000-8000-000000000003'::uuid, 'phoneme-matching', 'Phoneme matching', 2),
-  ('r0000004-0001-4000-8000-000000000004'::uuid, 'blending-cvc', 'Blending CVC words', 3),
-  ('r0000005-0001-4000-8000-000000000005'::uuid, 'segmenting', 'Segmenting simple words', 4),
+  ('e0000001-0001-4000-8000-000000000001'::uuid, 'letter-recognition', 'Letter recognition', 0),
+  ('e0000002-0001-4000-8000-000000000002'::uuid, 'letter-sounds', 'Letter sounds', 1),
+  ('e0000003-0001-4000-8000-000000000003'::uuid, 'phoneme-matching', 'Phoneme matching', 2),
+  ('e0000004-0001-4000-8000-000000000004'::uuid, 'blending-cvc', 'Blending CVC words', 3),
+  ('e0000005-0001-4000-8000-000000000005'::uuid, 'segmenting', 'Segmenting simple words', 4),
   ('a0000002-0001-4000-8000-000000000002'::uuid, 'sight-words-basic', 'Sight words', 5),
-  ('r0000006-0001-4000-8000-000000000006'::uuid, 'simple-sentence-reading', 'Simple sentence reading', 6)
+  ('e0000006-0001-4000-8000-000000000006'::uuid, 'simple-sentence-reading', 'Simple sentence reading', 6)
 ) AS v(id, slug, name, sort_order)
 WHERE d.slug = 'reading'
 ON CONFLICT (id) DO UPDATE SET sort_order = EXCLUDED.sort_order, name = EXCLUDED.name, unit_id = EXCLUDED.unit_id;
@@ -33,12 +33,12 @@ WHERE s.slug = 'sight-words-basic' AND s.domain_id = (SELECT id FROM public.doma
 INSERT INTO public.skill_prerequisites (skill_id, prerequisite_skill_id)
 SELECT skill_id, prerequisite_skill_id
 FROM (VALUES
-  ('r0000002-0001-4000-8000-000000000002'::uuid, 'r0000001-0001-4000-8000-000000000001'::uuid),
-  ('r0000003-0001-4000-8000-000000000003'::uuid, 'r0000002-0001-4000-8000-000000000002'::uuid),
-  ('r0000004-0001-4000-8000-000000000004'::uuid, 'r0000003-0001-4000-8000-000000000003'::uuid),
-  ('r0000005-0001-4000-8000-000000000005'::uuid, 'r0000004-0001-4000-8000-000000000004'::uuid),
-  ('a0000002-0001-4000-8000-000000000002'::uuid, 'r0000005-0001-4000-8000-000000000005'::uuid),
-  ('r0000006-0001-4000-8000-000000000006'::uuid, 'a0000002-0001-4000-8000-000000000002'::uuid)
+  ('e0000002-0001-4000-8000-000000000002'::uuid, 'e0000001-0001-4000-8000-000000000001'::uuid),
+  ('e0000003-0001-4000-8000-000000000003'::uuid, 'e0000002-0001-4000-8000-000000000002'::uuid),
+  ('e0000004-0001-4000-8000-000000000004'::uuid, 'e0000003-0001-4000-8000-000000000003'::uuid),
+  ('e0000005-0001-4000-8000-000000000005'::uuid, 'e0000004-0001-4000-8000-000000000004'::uuid),
+  ('a0000002-0001-4000-8000-000000000002'::uuid, 'e0000005-0001-4000-8000-000000000005'::uuid),
+  ('e0000006-0001-4000-8000-000000000006'::uuid, 'a0000002-0001-4000-8000-000000000002'::uuid)
 ) AS v(skill_id, prerequisite_skill_id)
 ON CONFLICT (skill_id, prerequisite_skill_id) DO NOTHING;
 
