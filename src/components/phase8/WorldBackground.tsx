@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useMemo } from 'react';
 import type { LearnerSlug } from '@/lib/learner-theme';
 
@@ -56,6 +57,21 @@ export function WorldBackground({ children, learnerSlug }: Props) {
     return WORLDS[worldFromMonth(m)];
   }, []);
 
+  const floaters = useMemo(
+    () =>
+      Array.from({ length: 14 }, (_, i) => ({
+        id: i,
+        icon: i % 5 === 0 ? '💖' : i % 3 === 0 ? '✨' : '●',
+        left: 6 + ((i * 7.3) % 88),
+        delay: (i % 7) * 0.6,
+        duration: 10 + (i % 5) * 2,
+        driftX: (i % 2 === 0 ? 1 : -1) * (8 + (i % 4) * 4),
+        opacity: 0.1 + (i % 4) * 0.05,
+        size: i % 3 === 0 ? 'text-xl' : i % 2 === 0 ? 'text-lg' : 'text-base',
+      })),
+    []
+  );
+
   return (
     <div
       className="relative min-h-screen overflow-hidden"
@@ -77,6 +93,34 @@ export function WorldBackground({ children, learnerSlug }: Props) {
         aria-hidden
       >
         ✨
+      </div>
+      <div className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" aria-hidden>
+        {floaters.map((f) => (
+          <motion.span
+            key={f.id}
+            className={`absolute ${f.size} ${f.icon === '●' ? 'text-white/50' : ''}`}
+            style={{
+              left: `${f.left}%`,
+              bottom: '-8%',
+              opacity: f.opacity,
+              filter: 'blur(0.2px)',
+            }}
+            animate={{
+              y: ['0vh', '-110vh'],
+              x: [0, f.driftX, 0],
+              opacity: [0, f.opacity, f.opacity * 1.2, f.opacity, 0],
+              scale: [0.9, 1.05, 0.95, 1],
+            }}
+            transition={{
+              duration: f.duration,
+              delay: f.delay,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          >
+            {f.icon}
+          </motion.span>
+        ))}
       </div>
       <div className="relative z-10">{children}</div>
     </div>
