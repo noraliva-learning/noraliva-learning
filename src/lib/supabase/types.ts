@@ -5,6 +5,8 @@
 
 export type AppRole = "parent" | "liv" | "elle";
 
+export type BuddySlug = "owl" | "dinosaur" | "cupcake" | "sloth" | "monster";
+
 export interface Profile {
   id: string;
   role: AppRole;
@@ -13,6 +15,8 @@ export interface Profile {
   age: number | null;
   grade_label: string | null;
   challenge_style: "strict" | "gentle";
+  /** Child-selected buddy (Phase 8); null until chosen */
+  buddy_slug?: BuddySlug | null;
   created_at: string;
   updated_at: string;
 }

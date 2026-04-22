@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { utcDateString } from '@/lib/dailyMission/utcDate';
 
 export type AttemptRow = {
   id: string;
@@ -21,6 +22,10 @@ export type ChildProgress = {
   role: string;
   attempts: AttemptRow[];
   mastery: MasteryRow[];
+  /** Phase 8 preview debug */
+  buddy_slug?: string | null;
+  daily_minimum_met_today?: boolean;
+  break_requests_today?: number;
 };
 
 /**
@@ -39,8 +44,11 @@ export async function getParentViewData(): Promise<ChildProgress[]> {
 
   const { data: children } = await supabase
     .from('profiles')
-    .select('id, display_name, role')
+    .select('id, display_name, role, buddy_slug')
     .eq('parent_id', user.id);
+
+  const missionDate = utcDateString();
+  const dayStart = `${missionDate}T00:00:00.000Z`;
 
   if (!children?.length) return [];
 
@@ -92,12 +100,29 @@ export async function getParentViewData(): Promise<ChildProgress[]> {
       }
     }
 
+    const { data: dailyRow } = await supabase
+      .from('learner_daily_mission')
+      .select('daily_minimum_met')
+      .eq('learner_id', child.id)
+      .eq('mission_date', missionDate)
+      .maybeSingle();
+
+    const { count: breakCount } = await supabase
+      .from('learner_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('learner_id', child.id)
+      .eq('event_type', 'break_request')
+      .gte('created_at', dayStart);
+
     result.push({
       id: child.id,
       display_name: child.display_name || child.role,
       role: child.role,
       attempts,
       mastery,
+      buddy_slug: (child as { buddy_slug?: string | null }).buddy_slug ?? null,
+      daily_minimum_met_today: !!(dailyRow as { daily_minimum_met?: boolean } | null)?.daily_minimum_met,
+      break_requests_today: breakCount ?? 0,
     });
   }
 

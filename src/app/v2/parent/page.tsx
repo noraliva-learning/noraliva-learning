@@ -139,6 +139,14 @@ export default function V2ParentDashboardPage() {
                     </ul>
                   )}
                 </div>
+                <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-3" data-testid="parent-phase8-debug">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview (Phase 8)</h4>
+                  <ul className="mt-2 space-y-1 text-xs text-slate-700">
+                    <li>Buddy: {child.buddy_slug ?? "—"}</li>
+                    <li>Daily minimum today: {child.daily_minimum_met_today ? "yes" : "no"}</li>
+                    <li>Break requests today: {child.break_requests_today ?? 0}</li>
+                  </ul>
+                </div>
               </div>
             ))}
           </div>

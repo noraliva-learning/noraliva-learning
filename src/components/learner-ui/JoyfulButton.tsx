@@ -10,6 +10,8 @@ type Props = {
   variant?: "primary" | "secondary" | "danger";
   className?: string;
   "aria-label"?: string;
+  "data-testid"?: string;
+  id?: string;
 };
 
 /**
@@ -23,6 +25,8 @@ export function JoyfulButton({
   variant = "primary",
   className = "",
   "aria-label": ariaLabel,
+  "data-testid": dataTestId,
+  id,
 }: Props) {
   const base =
     "rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md transition-colors disabled:opacity-50 disabled:pointer-events-none";
@@ -38,6 +42,8 @@ export function JoyfulButton({
   return (
     <motion.button
       type={type}
+      id={id}
+      data-testid={dataTestId}
       onClick={onClick}
       disabled={disabled}
       className={`${base} ${variants[variant]} ${className}`}

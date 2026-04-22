@@ -1,20 +1,24 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ReactNode } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EndSessionButton } from './SessionActions';
 import { SessionQuestion } from './SessionQuestion';
 import { AceChatPanel } from './AceChatPanel';
-import { CompanionElle, CompanionLiv } from '@/components/learner-companions';
 import { JoyfulButton } from '@/components/learner-ui/JoyfulButton';
+import { BuddyAvatar } from '@/components/phase8/BuddyAvatar';
+import { SmallCorrectCelebration, DailyCompleteCelebration } from '@/components/phase8/CelebrationLayers';
+import { BreakOverlay } from '@/components/phase8/BreakOverlay';
+import type { BuddySlug } from '@/lib/supabase/types';
+import type { BuddyReactionState } from '@/lib/buddy/buddyTypes';
 
 type Props = {
   sessionId: string;
   learnerSlug: 'liv' | 'elle';
-  learnerId: string;
   learnerName: string;
   domain: string;
+  buddySlug: BuddySlug | null;
+  gradeLabel?: string | null;
 };
 
 type Exercise = {
@@ -38,7 +42,14 @@ type Feedback = {
   encouragementMessage?: string;
 };
 
-export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, domain }: Props) {
+export function SessionFlow({
+  sessionId,
+  learnerSlug,
+  learnerName,
+  domain,
+  buddySlug,
+  gradeLabel,
+}: Props) {
   const [exercise, setExercise] = useState<Exercise>(null);
   const [prefetchedExercise, setPrefetchedExercise] = useState<Exercise>(null);
   const [isPrefetching, setIsPrefetching] = useState(false);
@@ -47,11 +58,27 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const questionsSeenRef = useRef(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
+  const [showSmallCelebration, setShowSmallCelebration] = useState(false);
+  const [showDailyComplete, setShowDailyComplete] = useState(false);
+  const [breakOpen, setBreakOpen] = useState(false);
+  const smallCelebrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Learner-specific tutor identity: Liv → Dan, Elle → Lila
   const helperName = learnerSlug === 'elle' ? 'Lila' : 'Dan';
-
   const missionTarget = 8;
+
+  const buddyReaction: BuddyReactionState = useMemo(() => {
+    if (breakOpen) return 'idle';
+    if (status === 'feedback' && feedback) return feedback.correct ? 'celebrate' : 'retry';
+    if (status === 'loading') return 'encourage';
+    if (status === 'celebration') return 'completion';
+    return 'idle';
+  }, [breakOpen, status, feedback]);
+
+  useEffect(() => {
+    return () => {
+      if (smallCelebrationTimer.current) clearTimeout(smallCelebrationTimer.current);
+    };
+  }, []);
 
   const buildExercise = (data: any, index: number): Exercise => ({
     exerciseId: data.exerciseId ?? null,
@@ -107,7 +134,7 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
       const nextExercise = buildExercise(data, nextIndex);
       setPrefetchedExercise(nextExercise);
     } catch {
-      // Background fetch failures should not break the current flow.
+      /* ignore */
     } finally {
       setIsPrefetching(false);
     }
@@ -117,10 +144,44 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
     fetchNext();
   }, [fetchNext]);
 
+  async function handleBreak() {
+    try {
+      await fetch('/api/v2/learner/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch {
+      /* still pause locally */
+    }
+    setBreakOpen(true);
+  }
+
   function handleResult(f: Feedback) {
     setFeedback(f);
     setLatestAnswer(null);
-    setCompletedCount((count) => count + 1);
+    setCompletedCount((count) => {
+      const next = count + 1;
+      if (next === 1) {
+        void (async () => {
+          const res = await fetch('/api/v2/learner/daily-progress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markMinimum: true }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.dailyMinimumJustMet) setShowDailyComplete(true);
+          }
+        })();
+      }
+      return next;
+    });
+    if (f.correct) {
+      setShowSmallCelebration(true);
+      if (smallCelebrationTimer.current) clearTimeout(smallCelebrationTimer.current);
+      smallCelebrationTimer.current = setTimeout(() => setShowSmallCelebration(false), 2200);
+    }
     if (f.nextStep === 'next') {
       prefetchNext();
     }
@@ -184,36 +245,11 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, type: 'spring', stiffness: 120 }}
         >
+          <BuddyAvatar buddySlug={buddySlug} state="completion" size="md" className="mx-auto mb-3" />
           <p className="text-3xl font-extrabold text-[rgb(var(--learner-text))]">🎉 Mission Complete!</p>
           <p className="mt-2 text-xl font-semibold text-[rgb(var(--learner-success-strong))]">+25 XP</p>
           <p className="mt-2 text-base text-[rgb(var(--learner-text))]">Your brain just got stronger!</p>
-
-          <div className="pointer-events-none absolute inset-0">
-            <motion.span
-              className="absolute -left-4 top-3 text-2xl"
-              initial={{ y: 16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1, rotate: -10 }}
-              transition={{ delay: 0.1, duration: 0.4 }}
-            >
-              ✨
-            </motion.span>
-            <motion.span
-              className="absolute right-4 top-6 text-xl"
-              initial={{ y: 16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1, rotate: 10 }}
-              transition={{ delay: 0.2, duration: 0.4 }}
-            >
-              🌟
-            </motion.span>
-            <motion.span
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 text-2xl"
-              initial={{ y: 16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
-            >
-              🎊
-            </motion.span>
-          </div>
+          <p className="mt-2 text-sm text-[rgb(var(--learner-text-muted))]">See you next time!</p>
         </motion.div>
         <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
       </div>
@@ -230,36 +266,19 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-[rgb(var(--learner-text))]">
-                  Nice job {learnerName}! ✨
-                </p>
+                <p className="text-base font-semibold text-[rgb(var(--learner-text))]">Nice job! ✨</p>
                 <p className="text-sm font-medium text-[rgb(var(--learner-success-strong))]">+10 XP</p>
               </div>
-              <div className="relative h-10 w-10">
-                <motion.span
-                  className="absolute inset-0 rounded-full bg-[rgb(var(--learner-success-strong))]/30"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1.2, opacity: 0 }}
-                  transition={{ duration: 0.8, repeat: Infinity, repeatDelay: 0.6 }}
-                />
-                <motion.span
-                  className="absolute inset-1 flex items-center justify-center rounded-full bg-[rgb(var(--learner-progress))] text-lg"
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  ✨
-                </motion.span>
-              </div>
+              <BuddyAvatar buddySlug={buddySlug} state="celebrate" size="sm" />
             </div>
           </motion.div>
         )}
 
         <p className="text-lg font-semibold text-[rgb(var(--learner-text))]">
           {feedback.correct
-            ? (feedback.encouragementMessage ||
-                ['You got it right!', 'You got it!', `Nice work, ${learnerName}!`, "Yes — that's right!"][completedCount % 4])
-            : 'Good try! Keep going.'}
+            ? feedback.encouragementMessage ||
+              ['Nice job!', 'You got it!', `Great work, ${learnerName}!`, "Yes — that's right!"][completedCount % 4]
+            : "Let's redo this. You've got this."}
         </p>
         {feedback.encouragementMessage && !feedback.correct && (
           <p className="mt-1 text-[rgb(var(--learner-text-muted))]">{feedback.encouragementMessage}</p>
@@ -283,8 +302,13 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
       <>
         <p className="mt-4 text-sm text-[rgb(var(--learner-text-muted))]">
           Question {exercise.index + 1}
+          {gradeLabel ? (
+            <span className="ml-2 rounded-full bg-[rgb(var(--learner-panel))] px-2 py-0.5 text-xs">
+              {gradeLabel}
+            </span>
+          ) : null}
         </p>
-        <p className="mt-1 text-sm font-semibold text-[rgb(var(--learner-text))]">🧠 Brain Warm-Up!</p>
+        <p className="mt-1 text-sm font-semibold text-[rgb(var(--learner-text))]">🧠 Brain warm-up</p>
         {exercise.exerciseId ? (
           <SessionQuestion
             sessionId={sessionId}
@@ -317,7 +341,10 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
             </div>
           </div>
         )}
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <JoyfulButton type="button" variant="secondary" onClick={handleBreak} data-testid="break-button">
+            Need a break?
+          </JoyfulButton>
           <EndSessionButton sessionId={sessionId} learnerSlug={learnerSlug} />
         </div>
       </>
@@ -336,49 +363,65 @@ export function SessionFlow({ sessionId, learnerSlug, learnerId, learnerName, do
   const safeCompleted = Math.min(completedCount, missionTarget);
   const progressPercent = Math.max(0, Math.min(100, (safeCompleted / missionTarget) * 100));
 
-  const Companion = learnerSlug === 'elle' ? CompanionElle : CompanionLiv;
-
-  return (
-    <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <Companion size={24} className="shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--learner-text-muted))]">
-                Mission Progress
-              </p>
-            </div>
-            <div className="mt-1 h-2 rounded-full bg-[rgb(var(--learner-border))]">
-              <div
-                className="h-2 rounded-full bg-[rgb(var(--learner-progress))] transition-[width] duration-500 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-[rgb(var(--learner-text-muted))]">
-              {safeCompleted} / {missionTarget} questions complete
+  const mainColumn = (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <BuddyAvatar buddySlug={buddySlug} state={buddyReaction} size="sm" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--learner-text-muted))]">
+              Mission Progress
             </p>
           </div>
-          <div className="shrink-0 rounded-full bg-[rgb(var(--learner-accent))] px-3 py-1 text-xs font-semibold text-[rgb(var(--learner-text))] shadow-sm">
-            🔥 1 Day Streak
+          <div className="mt-1 h-2 rounded-full bg-[rgb(var(--learner-border))]">
+            <div
+              className="h-2 rounded-full bg-[rgb(var(--learner-progress))] transition-[width] duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
+          <p className="mt-1 text-xs text-[rgb(var(--learner-text-muted))]">
+            {safeCompleted} / {missionTarget} questions complete
+          </p>
         </div>
+        <div className="shrink-0 rounded-full bg-[rgb(var(--learner-accent))] px-3 py-1 text-xs font-semibold text-[rgb(var(--learner-text))] shadow-sm">
+          🔥 1 Day Streak
+        </div>
+      </div>
 
-        {body}
-      </div>
-      <div className="w-full shrink-0 lg:mt-0 lg:w-80" data-testid="ask-dan-panel">
-        <AceChatPanel
-          sessionId={sessionId}
-          learnerName={learnerName}
-          learnerSlug={learnerSlug}
-          helperName={helperName}
-          domain={domain}
-          exerciseId={exercise?.exerciseId ?? null}
-          skillId={exercise?.skillId ?? null}
-          prompt={exercise?.prompt ?? null}
-          learnerAnswer={latestAnswer}
-        />
-      </div>
+      {body}
     </div>
+  );
+
+  return (
+    <>
+      <BreakOverlay
+        open={breakOpen}
+        buddySlug={buddySlug}
+        onResume={() => setBreakOpen(false)}
+      />
+      <SmallCorrectCelebration show={showSmallCelebration} buddySlug={buddySlug} />
+      <DailyCompleteCelebration
+        show={showDailyComplete}
+        buddySlug={buddySlug}
+        learnerName={learnerName}
+        onDismiss={() => setShowDailyComplete(false)}
+      />
+      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6" data-testid="session-flow-main">
+        {mainColumn}
+        <div className="w-full shrink-0 lg:mt-0 lg:w-80" data-testid="ask-dan-panel">
+          <AceChatPanel
+            sessionId={sessionId}
+            learnerName={learnerName}
+            learnerSlug={learnerSlug}
+            helperName={helperName}
+            domain={domain}
+            exerciseId={exercise?.exerciseId ?? null}
+            skillId={exercise?.skillId ?? null}
+            prompt={exercise?.prompt ?? null}
+            learnerAnswer={latestAnswer}
+          />
+        </div>
+      </div>
+    </>
   );
 }
